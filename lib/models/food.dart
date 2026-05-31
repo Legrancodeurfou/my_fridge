@@ -158,20 +158,24 @@ class FridgeStats {
   final int expired;
 
   factory FridgeStats.fromItems(List<FoodItem> items) {
+    var total = 0;
     var expiringSoon = 0;
     var expired = 0;
 
     for (final item in items) {
+      final units = item.quantity;
+      total += units;
+
       final days = ExpiryHelper.daysUntilExpiry(item.expiryDate);
       if (days < 0) {
-        expired++;
+        expired += units;
       } else if (days < 3) {
-        expiringSoon++;
+        expiringSoon += units;
       }
     }
 
     return FridgeStats(
-      total: items.length,
+      total: total,
       expiringSoon: expiringSoon,
       expired: expired,
     );

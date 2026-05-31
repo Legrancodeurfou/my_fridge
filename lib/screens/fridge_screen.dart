@@ -320,7 +320,7 @@ class _StatsCard extends StatelessWidget {
             child: _StatItem(
               icon: Icons.inventory_2_outlined,
               value: stats.total.toString(),
-              label: 'Total',
+              label: 'Unités',
               color: colorScheme.primary,
             ),
           ),

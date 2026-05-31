@@ -92,7 +92,7 @@ class _HomeContent extends StatelessWidget {
             title: 'Voir mon frigo',
             subtitle: stats.total == 0
                 ? 'Commence à remplir ton inventaire'
-                : '${stats.total} aliment${stats.total > 1 ? 's' : ''} en stock',
+                : '${stats.total} unité${stats.total > 1 ? 's' : ''} en stock',
             color: colorScheme.primary,
             onTap: () => onNavigateToTab(HomeScreen.fridgeTabIndex),
           ),
@@ -186,7 +186,7 @@ class _SummaryStatsCard extends StatelessWidget {
             child: _StatColumn(
               icon: Icons.inventory_2_outlined,
               value: totalFoods.toString(),
-              label: 'Aliments',
+              label: 'Unités',
               color: colorScheme.primary,
             ),
           ),
