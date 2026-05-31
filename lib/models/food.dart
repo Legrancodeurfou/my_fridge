@@ -9,13 +9,33 @@ class FoodItem {
     required this.emoji,
     required this.expiryDate,
     this.category = FoodCategory.other,
-  });
+    this.quantity = 1,
+  }) : assert(quantity >= 1);
 
   final String id;
   final String name;
   final String emoji;
   final DateTime expiryDate;
   final FoodCategory category;
+  final int quantity;
+
+  FoodItem copyWith({
+    String? id,
+    String? name,
+    String? emoji,
+    DateTime? expiryDate,
+    FoodCategory? category,
+    int? quantity,
+  }) {
+    return FoodItem(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      emoji: emoji ?? this.emoji,
+      expiryDate: expiryDate ?? this.expiryDate,
+      category: category ?? this.category,
+      quantity: quantity ?? this.quantity,
+    );
+  }
 
   Map<String, dynamic> toJson() {
     return {
@@ -24,16 +44,25 @@ class FoodItem {
       'emoji': emoji,
       'expiryDate': expiryDate.toIso8601String(),
       'category': category.name,
+      'quantity': quantity,
     };
   }
 
   factory FoodItem.fromJson(Map<String, dynamic> json) {
+    final rawQuantity = json['quantity'];
+    final quantity = switch (rawQuantity) {
+      final int value => value,
+      final num value => value.toInt(),
+      _ => 1,
+    };
+
     return FoodItem(
       id: json['id'] as String,
       name: json['name'] as String,
       emoji: json['emoji'] as String,
       expiryDate: DateTime.parse(json['expiryDate'] as String),
       category: FoodCategory.values.byName(json['category'] as String),
+      quantity: quantity < 1 ? 1 : quantity,
     );
   }
 }

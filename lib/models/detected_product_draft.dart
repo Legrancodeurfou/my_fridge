@@ -1,9 +1,6 @@
 import 'food.dart';
 
 /// Produit détecté pendant la validation du scan, avant ajout au frigo.
-///
-/// [quantity] sera persistée plus tard ; pour l’instant elle n’est utilisée
-/// que dans l’écran de validation.
 class DetectedProductDraft {
   DetectedProductDraft({
     required this.food,
@@ -20,6 +17,5 @@ class DetectedProductDraft {
     );
   }
 
-  /// Conversion vers le store tant que [FridgeStore] ne gère pas la quantité.
-  List<FoodItem> toFoodItemsForFridge() => [food];
+  List<FoodItem> toFoodItemsForFridge() => [food.copyWith(quantity: quantity)];
 }

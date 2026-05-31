@@ -477,12 +477,28 @@ class _FoodCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        food.name,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -0.2,
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              food.name,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: -0.2,
+                              ),
+                            ),
+                          ),
+                          if (food.quantity > 1) ...[
+                            const SizedBox(width: 8),
+                            Text(
+                              'x${food.quantity}',
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w800,
+                                color: colorScheme.primary,
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                       const SizedBox(height: 6),
                       Container(
@@ -712,6 +728,12 @@ class _FoodDetailSheet extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               _DetailRow(
+                icon: Icons.inventory_2_outlined,
+                label: 'Quantité',
+                value: food.quantity.toString(),
+              ),
+              const SizedBox(height: 12),
+              _DetailRow(
                 icon: Icons.event_outlined,
                 label: 'Date d’expiration',
                 value: _formatExpiryDate(food.expiryDate),
@@ -826,6 +848,7 @@ class _FoodFormSheetState extends State<_FoodFormSheet> {
 
   late FoodCategory _category;
   late DateTime _expiryDate;
+  late int _quantity;
 
   bool get _isEditing => widget.foodToEdit != null;
 
@@ -835,12 +858,22 @@ class _FoodFormSheetState extends State<_FoodFormSheet> {
     final food = widget.foodToEdit;
     _nameController = TextEditingController(text: food?.name ?? '');
     _category = food?.category ?? FoodCategory.other;
+    _quantity = food?.quantity ?? 1;
     _expiryDate = food?.expiryDate ??
         DateTime(
           DateTime.now().year,
           DateTime.now().month,
           DateTime.now().day,
         ).add(const Duration(days: 7));
+  }
+
+  void _incrementQuantity() {
+    setState(() => _quantity++);
+  }
+
+  void _decrementQuantity() {
+    if (_quantity <= 1) return;
+    setState(() => _quantity--);
   }
 
   @override
@@ -877,6 +910,7 @@ class _FoodFormSheetState extends State<_FoodFormSheet> {
       emoji: FoodCategoryHelper.emoji(_category),
       expiryDate: _expiryDate,
       category: _category,
+      quantity: _quantity,
     );
 
     widget.onSave(food);
@@ -994,6 +1028,31 @@ class _FoodFormSheetState extends State<_FoodFormSheet> {
                   onChanged: (value) {
                     if (value != null) setState(() => _category = value);
                   },
+                ),
+                const SizedBox(height: 16),
+                InputDecorator(
+                  decoration: _sheetInputDecoration(
+                    context,
+                    label: 'Quantité',
+                    prefixIcon: Icons.inventory_2_outlined,
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Quantité : $_quantity',
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      _FridgeQuantityStepper(
+                        quantity: _quantity,
+                        onDecrement: _decrementQuantity,
+                        onIncrement: _incrementQuantity,
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 16),
                 InkWell(
@@ -1127,6 +1186,64 @@ class _NoSearchResultsView extends StatelessWidget {
             style: theme.textTheme.bodyMedium?.copyWith(
               color: colorScheme.onSurfaceVariant,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FridgeQuantityStepper extends StatelessWidget {
+  const _FridgeQuantityStepper({
+    required this.quantity,
+    required this.onDecrement,
+    required this.onIncrement,
+  });
+
+  final int quantity;
+  final VoidCallback onDecrement;
+  final VoidCallback onIncrement;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final canDecrement = quantity > 1;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.55),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            onPressed: canDecrement ? onDecrement : null,
+            icon: const Icon(Icons.remove_rounded),
+            tooltip: 'Diminuer',
+            visualDensity: VisualDensity.compact,
+            iconSize: 20,
+          ),
+          SizedBox(
+            width: 28,
+            child: Text(
+              '$quantity',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          IconButton(
+            onPressed: onIncrement,
+            icon: const Icon(Icons.add_rounded),
+            tooltip: 'Augmenter',
+            visualDensity: VisualDensity.compact,
+            iconSize: 20,
           ),
         ],
       ),
