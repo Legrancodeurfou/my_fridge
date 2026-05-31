@@ -74,6 +74,29 @@ class FridgeStore extends ChangeNotifier {
     _save();
   }
 
+  /// Consomme une unité par aliment : quantity - 1, ou suppression si quantity == 1.
+  void consumeFoodsByIds(List<String> foodIds) {
+    if (foodIds.isEmpty) return;
+
+    final idsToConsume = foodIds.toSet();
+    final updated = <FoodItem>[];
+
+    for (final food in _foods) {
+      if (!idsToConsume.contains(food.id)) {
+        updated.add(food);
+        continue;
+      }
+
+      if (food.quantity > 1) {
+        updated.add(food.copyWith(quantity: food.quantity - 1));
+      }
+    }
+
+    _foods = updated;
+    notifyListeners();
+    _save();
+  }
+
   Future<void> _save() async {
     final prefs = await SharedPreferences.getInstance();
     final encoded = jsonEncode(_foods.map((food) => food.toJson()).toList());

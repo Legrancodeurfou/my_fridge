@@ -118,12 +118,24 @@ class RecipeIngredientMatch {
     required this.isAvailable,
     this.matchedFoodName,
     this.matchedFoodId,
+    this.matchedFoodQuantity,
   });
 
   final RecipeIngredient ingredient;
   final bool isAvailable;
   final String? matchedFoodName;
   final String? matchedFoodId;
+  final int? matchedFoodQuantity;
+
+  /// Libellé affiché pour un ingrédient présent dans le frigo (ex. « Pâtes x3 »).
+  String get fridgeDisplayLabel {
+    if (matchedFoodName == null) return ingredient.label;
+    final quantity = matchedFoodQuantity ?? 1;
+    return '$matchedFoodName x$quantity';
+  }
+
+  String get chipLabel =>
+      isAvailable && matchedFoodId != null ? fridgeDisplayLabel : ingredient.label;
 }
 
 abstract final class RecipeCatalog {
@@ -351,6 +363,7 @@ abstract final class RecipeCatalog {
             isAvailable: true,
             matchedFoodName: food.name,
             matchedFoodId: food.id,
+            matchedFoodQuantity: food.quantity,
           );
         }
       }
@@ -530,7 +543,7 @@ class _RecipeCard extends StatelessWidget {
                   children: matches
                       .map(
                         (match) => _IngredientChip(
-                          label: match.ingredient.label,
+                          label: match.chipLabel,
                           isAvailable: match.isAvailable,
                         ),
                       )
@@ -640,9 +653,7 @@ class _RecipeDetailSheet extends StatelessWidget {
                   children: availableMatches
                       .map(
                         (match) => Chip(
-                          label: Text(
-                            match.matchedFoodName ?? match.ingredient.label,
-                          ),
+                          label: Text(match.fridgeDisplayLabel),
                         ),
                       )
                       .toList(),
@@ -675,7 +686,7 @@ class _RecipeDetailSheet extends StatelessWidget {
     if (choice == null || choice == _CookedChoice.cancel) return;
 
     if (choice == _CookedChoice.remove) {
-      store.deleteFoodsByIds(foodIdsToRemove);
+      store.consumeFoodsByIds(foodIdsToRemove);
     }
 
     if (sheetContext.mounted) Navigator.pop(sheetContext);
@@ -684,8 +695,8 @@ class _RecipeDetailSheet extends StatelessWidget {
 
     final message = choice == _CookedChoice.remove
         ? foodIdsToRemove.length == 1
-            ? 'Bon appétit ! 1 aliment retiré du frigo.'
-            : 'Bon appétit ! ${foodIdsToRemove.length} aliments retirés du frigo.'
+            ? 'Bon appétit ! 1 unité retirée du frigo.'
+            : 'Bon appétit ! ${foodIdsToRemove.length} unités retirées du frigo.'
         : 'Bon appétit ! « ${recipe.name} » est noté.';
 
     ScaffoldMessenger.of(sheetContext).showSnackBar(
@@ -822,7 +833,7 @@ class _RecipeDetailSheet extends StatelessWidget {
                         children: available
                             .map(
                               (match) => _IngredientChip(
-                                label: match.matchedFoodName ?? match.ingredient.label,
+                                label: match.fridgeDisplayLabel,
                                 isAvailable: true,
                               ),
                             )
