@@ -102,42 +102,4 @@ class FridgeStore extends ChangeNotifier {
     final encoded = jsonEncode(_foods.map((food) => food.toJson()).toList());
     await prefs.setString(_storageKey, encoded);
   }
-
-  /// Produits fictifs « détectés » sur un ticket de caisse scanné.
-  static List<FoodItem> createTicketScanItems() {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final baseId = now.millisecondsSinceEpoch;
-
-    return [
-      FoodItem(
-        id: '${baseId}_0',
-        name: 'Pâtes',
-        emoji: '🍝',
-        expiryDate: today.add(const Duration(days: 365)),
-        category: FoodCategory.other,
-      ),
-      FoodItem(
-        id: '${baseId}_1',
-        name: 'Jambon',
-        emoji: '🥓',
-        expiryDate: today.add(const Duration(days: 5)),
-        category: FoodCategory.meat,
-      ),
-      FoodItem(
-        id: '${baseId}_2',
-        name: 'Crème fraîche',
-        emoji: '🥛',
-        expiryDate: today.add(const Duration(days: 10)),
-        category: FoodCategory.dairy,
-      ),
-      FoodItem(
-        id: '${baseId}_3',
-        name: 'Salade',
-        emoji: '🥬',
-        expiryDate: today.add(const Duration(days: 3)),
-        category: FoodCategory.produce,
-      ),
-    ];
-  }
 }

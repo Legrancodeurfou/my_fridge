@@ -1,21 +1,48 @@
 import 'food.dart';
 
-/// Produit détecté pendant la validation du scan, avant ajout au frigo.
+/// Brouillon affiché à la validation du scan, avant ajout au frigo.
 class DetectedProductDraft {
   DetectedProductDraft({
-    required this.food,
+    required this.id,
+    required this.name,
+    required this.category,
+    required this.estimatedExpirationDate,
     this.quantity = 1,
   }) : assert(quantity >= 1);
 
-  final FoodItem food;
+  final String id;
+  final String name;
+  final FoodCategory category;
+  final DateTime estimatedExpirationDate;
   final int quantity;
 
-  DetectedProductDraft copyWith({FoodItem? food, int? quantity}) {
+  String get emoji => FoodCategoryHelper.emoji(category);
+
+  DetectedProductDraft copyWith({
+    String? id,
+    String? name,
+    FoodCategory? category,
+    DateTime? estimatedExpirationDate,
+    int? quantity,
+  }) {
     return DetectedProductDraft(
-      food: food ?? this.food,
+      id: id ?? this.id,
+      name: name ?? this.name,
+      category: category ?? this.category,
+      estimatedExpirationDate:
+          estimatedExpirationDate ?? this.estimatedExpirationDate,
       quantity: quantity ?? this.quantity,
     );
   }
 
-  List<FoodItem> toFoodItemsForFridge() => [food.copyWith(quantity: quantity)];
+  FoodItem toFoodItem() {
+    return FoodItem(
+      id: id,
+      name: name,
+      emoji: emoji,
+      expiryDate: estimatedExpirationDate,
+      category: category,
+      quantity: quantity,
+    );
+  }
 }

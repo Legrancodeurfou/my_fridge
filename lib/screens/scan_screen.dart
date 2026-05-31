@@ -129,17 +129,17 @@ class _ScanScreenState extends State<ScanScreen> {
 
     setState(() => _isScanning = true);
 
-    final detectedItems =
+    final detectedDrafts =
         await _ticketAnalysis.analyzeTicket(_pickedImageBytes!);
 
     if (!mounted) return;
 
     setState(() => _isScanning = false);
 
-    await _showValidationSheet(detectedItems);
+    await _showValidationSheet(detectedDrafts);
   }
 
-  Future<void> _showValidationSheet(List<FoodItem> detectedItems) {
+  Future<void> _showValidationSheet(List<DetectedProductDraft> detectedDrafts) {
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -148,13 +148,13 @@ class _ScanScreenState extends State<ScanScreen> {
       enableDrag: false,
       builder: (sheetContext) {
         return _ScanValidationSheet(
-          detectedItems: detectedItems,
+          detectedDrafts: detectedDrafts,
           onCancel: () => Navigator.pop(sheetContext),
-          onValidate: (selectedItems) {
-            widget.store.addFoods(selectedItems);
+          onValidate: (selectedFoods) {
+            widget.store.addFoods(selectedFoods);
             Navigator.pop(sheetContext);
 
-            final count = selectedItems.length;
+            final count = selectedFoods.length;
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 behavior: SnackBarBehavior.floating,
@@ -354,14 +354,14 @@ class _TicketPreviewCard extends StatelessWidget {
 
 class _ScanValidationSheet extends StatefulWidget {
   const _ScanValidationSheet({
-    required this.detectedItems,
+    required this.detectedDrafts,
     required this.onCancel,
     required this.onValidate,
   });
 
-  final List<FoodItem> detectedItems;
+  final List<DetectedProductDraft> detectedDrafts;
   final VoidCallback onCancel;
-  final void Function(List<FoodItem> selectedItems) onValidate;
+  final void Function(List<FoodItem> selectedFoods) onValidate;
 
   @override
   State<_ScanValidationSheet> createState() => _ScanValidationSheetState();
@@ -373,19 +373,17 @@ class _ScanValidationSheetState extends State<_ScanValidationSheet> {
   @override
   void initState() {
     super.initState();
-    _items = widget.detectedItems
-        .map((food) => DetectedProductDraft(food: food))
-        .toList();
+    _items = List<DetectedProductDraft>.from(widget.detectedDrafts);
   }
 
   void _removeItem(String id) {
-    setState(() => _items.removeWhere((draft) => draft.food.id == id));
+    setState(() => _items.removeWhere((draft) => draft.id == id));
   }
 
   void _incrementQuantity(String id) {
     setState(() {
       _items = _items.map((draft) {
-        if (draft.food.id != id) return draft;
+        if (draft.id != id) return draft;
         return draft.copyWith(quantity: draft.quantity + 1);
       }).toList();
     });
@@ -394,14 +392,14 @@ class _ScanValidationSheetState extends State<_ScanValidationSheet> {
   void _decrementQuantity(String id) {
     setState(() {
       _items = _items.map((draft) {
-        if (draft.food.id != id || draft.quantity <= 1) return draft;
+        if (draft.id != id || draft.quantity <= 1) return draft;
         return draft.copyWith(quantity: draft.quantity - 1);
       }).toList();
     });
   }
 
-  List<FoodItem> _itemsForFridge() {
-    return _items.expand((draft) => draft.toFoodItemsForFridge()).toList();
+  List<FoodItem> _foodsForFridge() {
+    return _items.map((draft) => draft.toFoodItem()).toList();
   }
 
   int get _totalUnits =>
@@ -503,9 +501,9 @@ class _ScanValidationSheetState extends State<_ScanValidationSheet> {
                   final draft = _items[index];
                   return _DetectedProductTile(
                     draft: draft,
-                    onIncrement: () => _incrementQuantity(draft.food.id),
-                    onDecrement: () => _decrementQuantity(draft.food.id),
-                    onRemove: () => _removeItem(draft.food.id),
+                    onIncrement: () => _incrementQuantity(draft.id),
+                    onDecrement: () => _decrementQuantity(draft.id),
+                    onRemove: () => _removeItem(draft.id),
                   );
                 },
               ),
@@ -541,7 +539,7 @@ class _ScanValidationSheetState extends State<_ScanValidationSheet> {
                   Expanded(
                     child: FilledButton(
                       onPressed: canValidate
-                          ? () => widget.onValidate(_itemsForFridge())
+                          ? () => widget.onValidate(_foodsForFridge())
                           : null,
                       style: FilledButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 14),
@@ -579,8 +577,8 @@ class _DetectedProductTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final food = draft.food;
-    final expiryLabel = ExpiryHelper.labelFor(food.expiryDate);
+    final expiryLabel =
+        ExpiryHelper.labelFor(draft.estimatedExpirationDate);
 
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
@@ -599,7 +597,7 @@ class _DetectedProductTile extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                food.name,
+                draft.name,
                 style: theme.textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
@@ -640,7 +638,7 @@ class _DetectedProductTile extends StatelessWidget {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(food.emoji, style: const TextStyle(fontSize: 26)),
+                    Text(draft.emoji, style: const TextStyle(fontSize: 26)),
                     const SizedBox(width: 12),
                     Expanded(child: nameColumn),
                   ],
@@ -657,7 +655,7 @@ class _DetectedProductTile extends StatelessWidget {
           return Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Text(food.emoji, style: const TextStyle(fontSize: 26)),
+              Text(draft.emoji, style: const TextStyle(fontSize: 26)),
               const SizedBox(width: 12),
               Expanded(child: nameColumn),
               controlsRow,
