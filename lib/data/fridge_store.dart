@@ -16,13 +16,14 @@ class FridgeStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Simule l’ajout d’aliments détectés sur un ticket de caisse.
-  void addTicketScanResults() {
-    _foods = [..._createTicketScanItems(), ..._foods];
+  void addFoods(List<FoodItem> foods) {
+    if (foods.isEmpty) return;
+    _foods = [...foods, ..._foods];
     notifyListeners();
   }
 
-  List<FoodItem> _createTicketScanItems() {
+  /// Produits fictifs « détectés » sur un ticket de caisse scanné.
+  static List<FoodItem> createTicketScanItems() {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final baseId = now.millisecondsSinceEpoch;
