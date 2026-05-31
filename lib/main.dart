@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 
-import 'screens/home_screen.dart';
+import 'data/fridge_store.dart';
 import 'screens/fridge_screen.dart';
-import 'screens/scan_screen.dart';
-import 'screens/recipes_screen.dart';
+import 'screens/home_screen.dart';
 import 'screens/profile_screen.dart';
+import 'screens/recipes_screen.dart';
+import 'screens/scan_screen.dart';
 
 void main() {
   runApp(const MyApp());
@@ -30,26 +31,46 @@ class MainNavigation extends StatefulWidget {
 }
 
 class _MainNavigationState extends State<MainNavigation> {
+  static const _fridgeTabIndex = 1;
+
+  late final FridgeStore _fridgeStore;
   int _selectedIndex = 0;
 
-  final List<Widget> _screens = const [
-    HomeScreen(),
-    FridgeScreen(),
-    ScanScreen(),
-    RecipesScreen(),
-    ProfileScreen(),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _fridgeStore = FridgeStore();
+  }
+
+  @override
+  void dispose() {
+    _fridgeStore.dispose();
+    super.dispose();
+  }
+
+  void _goToFridge() {
+    setState(() => _selectedIndex = _fridgeTabIndex);
+  }
 
   @override
   Widget build(BuildContext context) {
+    final screens = [
+      const HomeScreen(),
+      FridgeScreen(store: _fridgeStore),
+      ScanScreen(
+        store: _fridgeStore,
+        onNavigateToFridge: _goToFridge,
+      ),
+      const RecipesScreen(),
+      const ProfileScreen(),
+    ];
+
     return Scaffold(
-      body: _screens[_selectedIndex],
+      body: screens[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: (index) {
-          setState(() {
-            _selectedIndex = index;
-          });
+          setState(() => _selectedIndex = index);
         },
         type: BottomNavigationBarType.fixed,
         items: const [

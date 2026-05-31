@@ -1,211 +1,28 @@
 import 'package:flutter/material.dart';
 
-// ---------------------------------------------------------------------------
-// Couche données — remplaçable par une base locale ou un repository réel.
-// ---------------------------------------------------------------------------
-
-enum ExpiryUrgency { expired, warning, safe }
-
-class FoodItem {
-  const FoodItem({
-    required this.id,
-    required this.name,
-    required this.emoji,
-    required this.expiryDate,
-    this.category = FoodCategory.other,
-  });
-
-  final String id;
-  final String name;
-  final String emoji;
-  final DateTime expiryDate;
-  final FoodCategory category;
-}
-
-enum FoodCategory { dairy, produce, meat, other }
-
-abstract final class FoodCategoryHelper {
-  static String label(FoodCategory category) {
-    return switch (category) {
-      FoodCategory.dairy => 'Produits laitiers',
-      FoodCategory.produce => 'Fruits & légumes',
-      FoodCategory.meat => 'Viande & poisson',
-      FoodCategory.other => 'Autre',
-    };
-  }
-
-  static String emoji(FoodCategory category) {
-    return switch (category) {
-      FoodCategory.dairy => '🥛',
-      FoodCategory.produce => '🥬',
-      FoodCategory.meat => '🥩',
-      FoodCategory.other => '🍽️',
-    };
-  }
-}
-
-/// Source de données fictive. Remplacer `fetchAll()` par un appel repository.
-abstract final class FridgeMockDataSource {
-  static List<FoodItem> fetchAll() {
-    final today = _today;
-
-    return [
-      FoodItem(
-        id: '1',
-        name: 'Lait',
-        emoji: '🥛',
-        expiryDate: today.add(const Duration(days: 3)),
-        category: FoodCategory.dairy,
-      ),
-      FoodItem(
-        id: '2',
-        name: 'Tomates',
-        emoji: '🍅',
-        expiryDate: today.add(const Duration(days: 1)),
-        category: FoodCategory.produce,
-      ),
-      FoodItem(
-        id: '3',
-        name: 'Emmental',
-        emoji: '🧀',
-        expiryDate: today.add(const Duration(days: 12)),
-        category: FoodCategory.dairy,
-      ),
-      FoodItem(
-        id: '4',
-        name: 'Steak haché',
-        emoji: '🥩',
-        expiryDate: today,
-        category: FoodCategory.meat,
-      ),
-      FoodItem(
-        id: '5',
-        name: 'Œufs',
-        emoji: '🥚',
-        expiryDate: today.add(const Duration(days: 6)),
-        category: FoodCategory.dairy,
-      ),
-      FoodItem(
-        id: '6',
-        name: 'Yaourt nature',
-        emoji: '🥣',
-        expiryDate: today.subtract(const Duration(days: 2)),
-        category: FoodCategory.dairy,
-      ),
-    ];
-  }
-
-  static DateTime get _today {
-    final now = DateTime.now();
-    return DateTime(now.year, now.month, now.day);
-  }
-}
-
-class FridgeStats {
-  const FridgeStats({
-    required this.total,
-    required this.expiringSoon,
-    required this.expired,
-  });
-
-  final int total;
-  final int expiringSoon;
-  final int expired;
-
-  factory FridgeStats.fromItems(List<FoodItem> items) {
-    var expiringSoon = 0;
-    var expired = 0;
-
-    for (final item in items) {
-      final days = ExpiryHelper.daysUntilExpiry(item.expiryDate);
-      if (days < 0) {
-        expired++;
-      } else if (days < 3) {
-        expiringSoon++;
-      }
-    }
-
-    return FridgeStats(
-      total: items.length,
-      expiringSoon: expiringSoon,
-      expired: expired,
-    );
-  }
-}
-
-abstract final class ExpiryHelper {
-  static DateTime get _today {
-    final now = DateTime.now();
-    return DateTime(now.year, now.month, now.day);
-  }
-
-  static int daysUntilExpiry(DateTime expiryDate) {
-    final normalized =
-        DateTime(expiryDate.year, expiryDate.month, expiryDate.day);
-    return normalized.difference(_today).inDays;
-  }
-
-  static ExpiryUrgency urgencyFor(DateTime expiryDate) {
-    final days = daysUntilExpiry(expiryDate);
-    if (days <= 0) return ExpiryUrgency.expired;
-    if (days < 3) return ExpiryUrgency.warning;
-    return ExpiryUrgency.safe;
-  }
-
-  static Color colorFor(ExpiryUrgency urgency) {
-    return switch (urgency) {
-      ExpiryUrgency.expired => const Color(0xFFE53935),
-      ExpiryUrgency.warning => const Color(0xFFFB8C00),
-      ExpiryUrgency.safe => const Color(0xFF43A047),
-    };
-  }
-
-  static Color backgroundFor(ExpiryUrgency urgency) {
-    return colorFor(urgency).withValues(alpha: 0.12);
-  }
-
-  static String labelFor(DateTime expiryDate) {
-    final days = daysUntilExpiry(expiryDate);
-
-    if (days < 0) {
-      final overdue = days.abs();
-      return overdue == 1 ? 'Expiré hier' : 'Expiré il y a $overdue jours';
-    }
-    if (days == 0) return 'Expire aujourd’hui';
-    if (days == 1) return 'Expire demain';
-    return 'Expire dans $days jours';
-  }
-
-  static IconData iconForCategory(FoodCategory category) {
-    return switch (category) {
-      FoodCategory.dairy => Icons.egg_alt_outlined,
-      FoodCategory.produce => Icons.eco_outlined,
-      FoodCategory.meat => Icons.set_meal_outlined,
-      FoodCategory.other => Icons.restaurant_outlined,
-    };
-  }
-}
+import '../data/fridge_store.dart';
+import '../models/food.dart';
 
 // ---------------------------------------------------------------------------
 // Écran principal
 // ---------------------------------------------------------------------------
 
 class FridgeScreen extends StatefulWidget {
-  const FridgeScreen({super.key});
+  const FridgeScreen({super.key, required this.store});
+
+  final FridgeStore store;
 
   @override
   State<FridgeScreen> createState() => _FridgeScreenState();
 }
 
 class _FridgeScreenState extends State<FridgeScreen> {
-  late List<FoodItem> _allFoods;
   final _searchController = TextEditingController();
   String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
-    _allFoods = FridgeMockDataSource.fetchAll();
     _searchController.addListener(_onSearchChanged);
   }
 
@@ -221,14 +38,12 @@ class _FridgeScreenState extends State<FridgeScreen> {
     setState(() => _searchQuery = _searchController.text.trim().toLowerCase());
   }
 
-  List<FoodItem> get _filteredFoods {
-    if (_searchQuery.isEmpty) return _allFoods;
-    return _allFoods
+  List<FoodItem> _filteredFoods(List<FoodItem> allFoods) {
+    if (_searchQuery.isEmpty) return allFoods;
+    return allFoods
         .where((food) => food.name.toLowerCase().contains(_searchQuery))
         .toList();
   }
-
-  FridgeStats get _stats => FridgeStats.fromItems(_allFoods);
 
   void _onAddFood() {
     showModalBottomSheet<void>(
@@ -242,7 +57,7 @@ class _FridgeScreenState extends State<FridgeScreen> {
           ),
           child: _AddFoodSheet(
             onSave: (food) {
-              setState(() => _allFoods = [food, ..._allFoods]);
+              widget.store.addFood(food);
               Navigator.pop(sheetContext);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -262,10 +77,19 @@ class _FridgeScreenState extends State<FridgeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: widget.store,
+      builder: (context, _) => _buildContent(context),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final filteredFoods = _filteredFoods;
-    final isFridgeEmpty = _allFoods.isEmpty;
+    final allFoods = widget.store.foods;
+    final filteredFoods = _filteredFoods(allFoods);
+    final stats = FridgeStats.fromItems(allFoods);
+    final isFridgeEmpty = allFoods.isEmpty;
     final hasSearchResults = filteredFoods.isNotEmpty;
 
     return Scaffold(
@@ -296,7 +120,7 @@ class _FridgeScreenState extends State<FridgeScreen> {
                       children: [
                         _SearchField(controller: _searchController),
                         const SizedBox(height: 16),
-                        _StatsCard(stats: _stats),
+                        _StatsCard(stats: stats),
                         const SizedBox(height: 8),
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 12),
