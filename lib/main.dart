@@ -61,7 +61,7 @@ class _MainNavigationState extends State<MainNavigation> {
         store: _fridgeStore,
         onNavigateToFridge: _goToFridge,
       ),
-      const RecipesScreen(),
+      RecipesScreen(store: _fridgeStore),
       const ProfileScreen(),
     ];
 
