@@ -1,4 +1,7 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../data/fridge_store.dart';
 import '../models/food.dart';
@@ -18,10 +21,119 @@ class ScanScreen extends StatefulWidget {
 }
 
 class _ScanScreenState extends State<ScanScreen> {
+  final _imagePicker = ImagePicker();
+
+  XFile? _pickedImage;
+  Uint8List? _pickedImageBytes;
   bool _isScanning = false;
 
-  Future<void> _simulateTicketScan() async {
+  Future<void> _showImageSourceSheet() async {
     if (_isScanning) return;
+
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        final colorScheme = Theme.of(sheetContext).colorScheme;
+        return Container(
+          decoration: BoxDecoration(
+            color: colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: colorScheme.outlineVariant,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    'Choisir une source',
+                    style: Theme.of(sheetContext).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                  const SizedBox(height: 16),
+                  ListTile(
+                    leading: const Icon(Icons.photo_camera_outlined),
+                    title: const Text('Prendre une photo'),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    onTap: () =>
+                        Navigator.pop(sheetContext, ImageSource.camera),
+                  ),
+                  const SizedBox(height: 8),
+                  ListTile(
+                    leading: const Icon(Icons.photo_library_outlined),
+                    title: const Text('Choisir dans la galerie'),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    onTap: () =>
+                        Navigator.pop(sheetContext, ImageSource.gallery),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    if (source == null || !mounted) return;
+    await _pickImage(source);
+  }
+
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final image = await _imagePicker.pickImage(
+        source: source,
+        imageQuality: 85,
+      );
+
+      if (!mounted) return;
+
+      // Annulation : pas de changement d’état (conserve l’aperçu précédent si existant).
+      if (image == null) return;
+
+      final bytes = await image.readAsBytes();
+      if (!mounted) return;
+
+      setState(() {
+        _pickedImage = image;
+        _pickedImageBytes = bytes;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          content: Text('Impossible d’accéder à la ${source == ImageSource.camera ? 'caméra' : 'galerie'}'),
+        ),
+      );
+    }
+  }
+
+  void _clearPickedImage() {
+    setState(() {
+      _pickedImage = null;
+      _pickedImageBytes = null;
+    });
+  }
+
+  Future<void> _analyzeTicket() async {
+    if (_isScanning || _pickedImage == null) return;
 
     setState(() => _isScanning = true);
 
@@ -75,6 +187,7 @@ class _ScanScreenState extends State<ScanScreen> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final hasPreview = _pickedImageBytes != null;
 
     return Scaffold(
       backgroundColor: colorScheme.surfaceContainerLowest,
@@ -89,49 +202,116 @@ class _ScanScreenState extends State<ScanScreen> {
         children: [
           Padding(
             padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(
-                  Icons.camera_alt,
-                  size: 90,
-                ),
-                const SizedBox(height: 24),
-                const Text(
-                  'Scanne ton ticket de caisse',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Prends une photo de ton ticket pour ajouter automatiquement tes produits dans ton frigo.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 16),
-                ),
-                const SizedBox(height: 32),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: _isScanning ? null : _simulateTicketScan,
-                    icon: const Icon(Icons.photo_camera),
-                    label: const Text('Prendre une photo'),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: _isScanning ? null : () {},
-                    icon: const Icon(Icons.edit),
-                    label: const Text('Ajouter manuellement'),
-                  ),
-                ),
-              ],
-            ),
+            child: hasPreview
+                ? _buildPreviewContent(context)
+                : _buildInitialContent(context),
           ),
           if (_isScanning) const _ScanLoadingOverlay(),
         ],
       ),
+    );
+  }
+
+  Widget _buildInitialContent(BuildContext context) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Icon(
+          Icons.camera_alt,
+          size: 90,
+        ),
+        const SizedBox(height: 24),
+        const Text(
+          'Scanne ton ticket de caisse',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 12),
+        const Text(
+          'Prends une photo de ton ticket pour ajouter automatiquement tes produits dans ton frigo.',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 16),
+        ),
+        const SizedBox(height: 32),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: _isScanning ? null : _showImageSourceSheet,
+            icon: const Icon(Icons.photo_camera),
+            label: const Text('Prendre une photo'),
+          ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: _isScanning ? null : () {},
+            icon: const Icon(Icons.edit),
+            label: const Text('Ajouter manuellement'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPreviewContent(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final imageBytes = _pickedImageBytes!;
+
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Aperçu du ticket',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'Vérifie que le ticket est lisible avant l’analyse.',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 16,
+            color: colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 24),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: AspectRatio(
+            aspectRatio: 3 / 4,
+            child: Image.memory(
+              imageBytes,
+              fit: BoxFit.cover,
+              gaplessPlayback: true,
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: _isScanning ? null : _analyzeTicket,
+            icon: const Icon(Icons.document_scanner_outlined),
+            label: const Text('Analyser le ticket'),
+          ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: _isScanning ? null : _showImageSourceSheet,
+            icon: const Icon(Icons.photo_camera_outlined),
+            label: const Text('Changer la photo'),
+          ),
+        ),
+        const SizedBox(height: 8),
+        TextButton(
+          onPressed: _isScanning ? null : _clearPickedImage,
+          child: const Text('Supprimer l’aperçu'),
+        ),
+      ],
     );
   }
 }

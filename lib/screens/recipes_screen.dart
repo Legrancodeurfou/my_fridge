@@ -12,22 +12,21 @@ class RecipesScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: store,
-      builder: (context, _) => _RecipesContent(
-        foods: store.foods,
-      ),
+      builder: (context, _) => _RecipesContent(store: store),
     );
   }
 }
 
 class _RecipesContent extends StatelessWidget {
-  const _RecipesContent({required this.foods});
+  const _RecipesContent({required this.store});
 
-  final List<FoodItem> foods;
+  final FridgeStore store;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final foods = store.foods;
     final recipes = RecipeCatalog.suggestFor(foods);
 
     return Scaffold(
@@ -68,7 +67,7 @@ class _RecipesContent extends StatelessWidget {
                         padding: const EdgeInsets.only(bottom: 12),
                         child: _RecipeCard(
                           recipe: recipe,
-                          foods: foods,
+                          store: store,
                         ),
                       ),
                     ),
@@ -118,11 +117,13 @@ class RecipeIngredientMatch {
     required this.ingredient,
     required this.isAvailable,
     this.matchedFoodName,
+    this.matchedFoodId,
   });
 
   final RecipeIngredient ingredient;
   final bool isAvailable;
   final String? matchedFoodName;
+  final String? matchedFoodId;
 }
 
 abstract final class RecipeCatalog {
@@ -349,6 +350,7 @@ abstract final class RecipeCatalog {
             ingredient: ingredient,
             isAvailable: true,
             matchedFoodName: food.name,
+            matchedFoodId: food.id,
           );
         }
       }
@@ -362,6 +364,17 @@ abstract final class RecipeCatalog {
         isAvailable: hasMatch,
       );
     }).toList();
+  }
+
+  static List<String> matchedFoodIds(
+    RecipeSuggestion recipe,
+    List<FoodItem> foods,
+  ) {
+    return matchIngredients(recipe, foods)
+        .where((match) => match.isAvailable && match.matchedFoodId != null)
+        .map((match) => match.matchedFoodId!)
+        .toSet()
+        .toList();
   }
 
   static bool _hasAny(List<String> foodNames, List<String> keywords) {
@@ -378,11 +391,11 @@ abstract final class RecipeCatalog {
 class _RecipeCard extends StatelessWidget {
   const _RecipeCard({
     required this.recipe,
-    required this.foods,
+    required this.store,
   });
 
   final RecipeSuggestion recipe;
-  final List<FoodItem> foods;
+  final FridgeStore store;
 
   void _showRecipeDetails(BuildContext context) {
     showModalBottomSheet<void>(
@@ -392,7 +405,7 @@ class _RecipeCard extends StatelessWidget {
       builder: (sheetContext) {
         return _RecipeDetailSheet(
           recipe: recipe,
-          foods: foods,
+          store: store,
         );
       },
     );
@@ -402,6 +415,7 @@ class _RecipeCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final foods = store.foods;
     final matches = RecipeCatalog.matchIngredients(recipe, foods);
     final availableCount = matches.where((item) => item.isAvailable).length;
 
@@ -588,22 +602,97 @@ class _IngredientChip extends StatelessWidget {
   }
 }
 
+enum _CookedChoice { cancel, keep, remove }
+
 class _RecipeDetailSheet extends StatelessWidget {
   const _RecipeDetailSheet({
     required this.recipe,
-    required this.foods,
+    required this.store,
   });
 
   final RecipeSuggestion recipe;
-  final List<FoodItem> foods;
+  final FridgeStore store;
 
-  void _onCooked(BuildContext context) {
-    Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(
+  Future<void> _onCooked(BuildContext sheetContext) async {
+    final foods = store.foods;
+    final availableMatches = RecipeCatalog.matchIngredients(recipe, foods)
+        .where((match) => match.isAvailable)
+        .toList();
+    final foodIdsToRemove = RecipeCatalog.matchedFoodIds(recipe, foods);
+
+    final choice = await showDialog<_CookedChoice>(
+      context: sheetContext,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Ingrédients utilisés'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Veux-tu retirer du frigo les ingrédients utilisés ?',
+              ),
+              if (availableMatches.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: availableMatches
+                      .map(
+                        (match) => Chip(
+                          label: Text(
+                            match.matchedFoodName ?? match.ingredient.label,
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () =>
+                  Navigator.pop(dialogContext, _CookedChoice.cancel),
+              child: const Text('Annuler'),
+            ),
+            TextButton(
+              onPressed: () =>
+                  Navigator.pop(dialogContext, _CookedChoice.keep),
+              child: const Text('Non, garder les aliments'),
+            ),
+            FilledButton(
+              onPressed: foodIdsToRemove.isEmpty
+                  ? null
+                  : () => Navigator.pop(dialogContext, _CookedChoice.remove),
+              child: const Text('Oui, retirer du frigo'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (choice == null || choice == _CookedChoice.cancel) return;
+
+    if (choice == _CookedChoice.remove) {
+      store.deleteFoodsByIds(foodIdsToRemove);
+    }
+
+    if (sheetContext.mounted) Navigator.pop(sheetContext);
+
+    if (!sheetContext.mounted) return;
+
+    final message = choice == _CookedChoice.remove
+        ? foodIdsToRemove.length == 1
+            ? 'Bon appétit ! 1 aliment retiré du frigo.'
+            : 'Bon appétit ! ${foodIdsToRemove.length} aliments retirés du frigo.'
+        : 'Bon appétit ! « ${recipe.name} » est noté.';
+
+    ScaffoldMessenger.of(sheetContext).showSnackBar(
       SnackBar(
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        content: Text('Bon appétit ! « ${recipe.name} » est noté.'),
+        content: Text(message),
       ),
     );
   }
@@ -612,6 +701,7 @@ class _RecipeDetailSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final foods = store.foods;
     final matches = RecipeCatalog.matchIngredients(recipe, foods);
     final available = matches.where((item) => item.isAvailable).toList();
     final missing = matches.where((item) => !item.isAvailable).toList();

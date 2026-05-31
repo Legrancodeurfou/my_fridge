@@ -26,6 +26,10 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>My Fridge a besoin de la caméra pour photographier ton ticket de caisse.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>My Fridge a besoin d’accéder à tes photos pour choisir une image de ticket.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
