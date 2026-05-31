@@ -52,10 +52,17 @@ class _MainNavigationState extends State<MainNavigation> {
     setState(() => _selectedIndex = _fridgeTabIndex);
   }
 
+  void _goToTab(int index) {
+    setState(() => _selectedIndex = index);
+  }
+
   @override
   Widget build(BuildContext context) {
     final screens = [
-      const HomeScreen(),
+      HomeScreen(
+        store: _fridgeStore,
+        onNavigateToTab: _goToTab,
+      ),
       FridgeScreen(store: _fridgeStore),
       ScanScreen(
         store: _fridgeStore,
