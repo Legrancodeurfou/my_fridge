@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../data/fridge_store.dart';
 import '../models/food.dart';
+import '../services/ticket_analysis_service.dart';
 
 class ScanScreen extends StatefulWidget {
   const ScanScreen({
@@ -22,6 +23,7 @@ class ScanScreen extends StatefulWidget {
 
 class _ScanScreenState extends State<ScanScreen> {
   final _imagePicker = ImagePicker();
+  final _ticketAnalysis = const TicketAnalysisService();
 
   Uint8List? _pickedImageBytes;
   bool _isScanning = false;
@@ -126,13 +128,13 @@ class _ScanScreenState extends State<ScanScreen> {
 
     setState(() => _isScanning = true);
 
-    await Future<void>.delayed(const Duration(seconds: 2));
+    final detectedItems =
+        await _ticketAnalysis.analyzeTicket(_pickedImageBytes!);
 
     if (!mounted) return;
 
     setState(() => _isScanning = false);
 
-    final detectedItems = FridgeStore.createTicketScanItems();
     await _showValidationSheet(detectedItems);
   }
 
