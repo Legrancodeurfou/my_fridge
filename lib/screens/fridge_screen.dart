@@ -46,6 +46,68 @@ class _FridgeScreenState extends State<FridgeScreen> {
   }
 
   void _onAddFood() {
+    _showFoodFormSheet();
+  }
+
+  void _onFoodTap(FoodItem food) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return _FoodDetailSheet(
+          food: food,
+          onEdit: () {
+            Navigator.pop(sheetContext);
+            _showFoodFormSheet(foodToEdit: food);
+          },
+          onDelete: () => _confirmDeleteFood(sheetContext, food),
+        );
+      },
+    );
+  }
+
+  Future<void> _confirmDeleteFood(BuildContext sheetContext, FoodItem food) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Supprimer l’aliment ?'),
+          content: Text(
+            '« ${food.name} » sera retiré de ton frigo. Cette action est irréversible.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Annuler'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(dialogContext).colorScheme.error,
+              ),
+              child: const Text('Supprimer'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    widget.store.deleteFood(food.id);
+    if (sheetContext.mounted) Navigator.pop(sheetContext);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        content: Text('${food.name} supprimé du frigo'),
+      ),
+    );
+  }
+
+  void _showFoodFormSheet({FoodItem? foodToEdit}) {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -55,9 +117,14 @@ class _FridgeScreenState extends State<FridgeScreen> {
           padding: EdgeInsets.only(
             bottom: MediaQuery.viewInsetsOf(sheetContext).bottom,
           ),
-          child: _AddFoodSheet(
+          child: _FoodFormSheet(
+            foodToEdit: foodToEdit,
             onSave: (food) {
-              widget.store.addFood(food);
+              if (foodToEdit == null) {
+                widget.store.addFood(food);
+              } else {
+                widget.store.updateFood(food);
+              }
               Navigator.pop(sheetContext);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -65,7 +132,11 @@ class _FridgeScreenState extends State<FridgeScreen> {
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  content: Text('${food.name} ajouté au frigo'),
+                  content: Text(
+                    foodToEdit == null
+                        ? '${food.name} ajouté au frigo'
+                        : '${food.name} modifié',
+                  ),
                 ),
               );
             },
@@ -151,7 +222,10 @@ class _FridgeScreenState extends State<FridgeScreen> {
                       separatorBuilder: (context, _) =>
                           const SizedBox(height: 12),
                       itemBuilder: (context, index) {
-                        return _FoodCard(food: filteredFoods[index]);
+                        return _FoodCard(
+                          food: filteredFoods[index],
+                          onTap: () => _onFoodTap(filteredFoods[index]),
+                        );
                       },
                     ),
                   ),
@@ -333,9 +407,13 @@ class _VerticalDivider extends StatelessWidget {
 }
 
 class _FoodCard extends StatelessWidget {
-  const _FoodCard({required this.food});
+  const _FoodCard({
+    required this.food,
+    required this.onTap,
+  });
 
   final FoodItem food;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -351,7 +429,7 @@ class _FoodCard extends StatelessWidget {
       elevation: 0,
       borderRadius: BorderRadius.circular(18),
       child: InkWell(
-        onTap: () {},
+        onTap: onTap,
         borderRadius: BorderRadius.circular(18),
         child: Ink(
           decoration: BoxDecoration(
@@ -517,28 +595,252 @@ class _EmptyFridgeView extends StatelessWidget {
   }
 }
 
-class _AddFoodSheet extends StatefulWidget {
-  const _AddFoodSheet({required this.onSave});
+class _FoodDetailSheet extends StatelessWidget {
+  const _FoodDetailSheet({
+    required this.food,
+    required this.onEdit,
+    required this.onDelete,
+  });
 
-  final void Function(FoodItem food) onSave;
+  final FoodItem food;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  String _formatExpiryDate(DateTime date) {
+    const months = [
+      'janv.',
+      'févr.',
+      'mars',
+      'avr.',
+      'mai',
+      'juin',
+      'juil.',
+      'août',
+      'sept.',
+      'oct.',
+      'nov.',
+      'déc.',
+    ];
+    return '${date.day} ${months[date.month - 1]} ${date.year}';
+  }
 
   @override
-  State<_AddFoodSheet> createState() => _AddFoodSheetState();
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final urgency = ExpiryHelper.urgencyFor(food.expiryDate);
+    final urgencyColor = ExpiryHelper.colorFor(urgency);
+    final urgencyBackground = ExpiryHelper.backgroundFor(urgency);
+    final expiryLabel = ExpiryHelper.labelFor(food.expiryDate);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: colorScheme.outlineVariant,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Container(
+                    width: 64,
+                    height: 64,
+                    decoration: BoxDecoration(
+                      color: urgencyBackground,
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(food.emoji, style: const TextStyle(fontSize: 32)),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          food.name,
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.3,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: urgencyBackground,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            expiryLabel,
+                            style: theme.textTheme.labelMedium?.copyWith(
+                              color: urgencyColor,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              _DetailRow(
+                icon: Icons.category_outlined,
+                label: 'Catégorie',
+                value: FoodCategoryHelper.label(food.category),
+              ),
+              const SizedBox(height: 12),
+              _DetailRow(
+                icon: Icons.event_outlined,
+                label: 'Date d’expiration',
+                value: _formatExpiryDate(food.expiryDate),
+              ),
+              const SizedBox(height: 28),
+              FilledButton.icon(
+                onPressed: onEdit,
+                icon: const Icon(Icons.edit_outlined),
+                label: const Text('Modifier'),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: onDelete,
+                icon: Icon(Icons.delete_outline, color: colorScheme.error),
+                label: Text(
+                  'Supprimer',
+                  style: TextStyle(color: colorScheme.error),
+                ),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  side: BorderSide(color: colorScheme.error.withValues(alpha: 0.5)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
-class _AddFoodSheetState extends State<_AddFoodSheet> {
-  final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
+class _DetailRow extends StatelessWidget {
+  const _DetailRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
 
-  FoodCategory _category = FoodCategory.other;
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.45),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: colorScheme.onSurfaceVariant, size: 22),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FoodFormSheet extends StatefulWidget {
+  const _FoodFormSheet({
+    required this.onSave,
+    this.foodToEdit,
+  });
+
+  final void Function(FoodItem food) onSave;
+  final FoodItem? foodToEdit;
+
+  @override
+  State<_FoodFormSheet> createState() => _FoodFormSheetState();
+}
+
+class _FoodFormSheetState extends State<_FoodFormSheet> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _nameController;
+
+  late FoodCategory _category;
   late DateTime _expiryDate;
+
+  bool get _isEditing => widget.foodToEdit != null;
 
   @override
   void initState() {
     super.initState();
-    final now = DateTime.now();
-    _expiryDate = DateTime(now.year, now.month, now.day)
-        .add(const Duration(days: 7));
+    final food = widget.foodToEdit;
+    _nameController = TextEditingController(text: food?.name ?? '');
+    _category = food?.category ?? FoodCategory.other;
+    _expiryDate = food?.expiryDate ??
+        DateTime(
+          DateTime.now().year,
+          DateTime.now().month,
+          DateTime.now().day,
+        ).add(const Duration(days: 7));
   }
 
   @override
@@ -569,7 +871,8 @@ class _AddFoodSheetState extends State<_AddFoodSheet> {
 
     final name = _nameController.text.trim();
     final food = FoodItem(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: widget.foodToEdit?.id ??
+          DateTime.now().millisecondsSinceEpoch.toString(),
       name: name,
       emoji: FoodCategoryHelper.emoji(_category),
       expiryDate: _expiryDate,
@@ -629,7 +932,7 @@ class _AddFoodSheetState extends State<_AddFoodSheet> {
                 ),
                 const SizedBox(height: 20),
                 Text(
-                  'Ajouter un aliment',
+                  _isEditing ? 'Modifier l’aliment' : 'Ajouter un aliment',
                   style: theme.textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.w800,
                     letterSpacing: -0.3,
@@ -637,7 +940,9 @@ class _AddFoodSheetState extends State<_AddFoodSheet> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Renseignez les informations pour suivre la péremption.',
+                  _isEditing
+                      ? 'Met à jour les informations de cet aliment.'
+                      : 'Renseignez les informations pour suivre la péremption.',
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                   ),

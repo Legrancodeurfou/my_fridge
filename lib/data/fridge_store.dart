@@ -49,6 +49,22 @@ class FridgeStore extends ChangeNotifier {
     _save();
   }
 
+  void updateFood(FoodItem updatedFood) {
+    final index = _foods.indexWhere((food) => food.id == updatedFood.id);
+    if (index == -1) return;
+
+    _foods = [..._foods];
+    _foods[index] = updatedFood;
+    notifyListeners();
+    _save();
+  }
+
+  void deleteFood(String foodId) {
+    _foods = _foods.where((food) => food.id != foodId).toList();
+    notifyListeners();
+    _save();
+  }
+
   Future<void> _save() async {
     final prefs = await SharedPreferences.getInstance();
     final encoded = jsonEncode(_foods.map((food) => food.toJson()).toList());
