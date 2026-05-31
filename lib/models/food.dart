@@ -16,6 +16,26 @@ class FoodItem {
   final String emoji;
   final DateTime expiryDate;
   final FoodCategory category;
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'emoji': emoji,
+      'expiryDate': expiryDate.toIso8601String(),
+      'category': category.name,
+    };
+  }
+
+  factory FoodItem.fromJson(Map<String, dynamic> json) {
+    return FoodItem(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      emoji: json['emoji'] as String,
+      expiryDate: DateTime.parse(json['expiryDate'] as String),
+      category: FoodCategory.values.byName(json['category'] as String),
+    );
+  }
 }
 
 enum FoodCategory { dairy, produce, meat, other }

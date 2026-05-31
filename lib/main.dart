@@ -7,7 +7,8 @@ import 'screens/profile_screen.dart';
 import 'screens/recipes_screen.dart';
 import 'screens/scan_screen.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const MyApp());
 }
 
@@ -16,15 +17,56 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
+    return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: MainNavigation(),
+      home: FutureBuilder<FridgeStore>(
+        future: FridgeStore.load(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const _LoadingScreen();
+          }
+
+          if (!snapshot.hasData) {
+            return const _LoadingScreen(
+              message: 'Impossible de charger le frigo',
+            );
+          }
+
+          return MainNavigation(store: snapshot.data!);
+        },
+      ),
+    );
+  }
+}
+
+class _LoadingScreen extends StatelessWidget {
+  const _LoadingScreen({this.message});
+
+  final String? message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            if (message != null) ...[
+              const SizedBox(height: 16),
+              Text(message!),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }
 
 class MainNavigation extends StatefulWidget {
-  const MainNavigation({super.key});
+  const MainNavigation({super.key, required this.store});
+
+  final FridgeStore store;
 
   @override
   State<MainNavigation> createState() => _MainNavigationState();
@@ -39,7 +81,7 @@ class _MainNavigationState extends State<MainNavigation> {
   @override
   void initState() {
     super.initState();
-    _fridgeStore = FridgeStore();
+    _fridgeStore = widget.store;
   }
 
   @override
