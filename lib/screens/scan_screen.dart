@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../data/fridge_store.dart';
+import '../models/detected_product_draft.dart';
 import '../models/food.dart';
 import '../services/ticket_analysis_service.dart';
 
@@ -367,17 +368,44 @@ class _ScanValidationSheet extends StatefulWidget {
 }
 
 class _ScanValidationSheetState extends State<_ScanValidationSheet> {
-  late List<FoodItem> _items;
+  late List<DetectedProductDraft> _items;
 
   @override
   void initState() {
     super.initState();
-    _items = List<FoodItem>.from(widget.detectedItems);
+    _items = widget.detectedItems
+        .map((food) => DetectedProductDraft(food: food))
+        .toList();
   }
 
   void _removeItem(String id) {
-    setState(() => _items.removeWhere((item) => item.id == id));
+    setState(() => _items.removeWhere((draft) => draft.food.id == id));
   }
+
+  void _incrementQuantity(String id) {
+    setState(() {
+      _items = _items.map((draft) {
+        if (draft.food.id != id) return draft;
+        return draft.copyWith(quantity: draft.quantity + 1);
+      }).toList();
+    });
+  }
+
+  void _decrementQuantity(String id) {
+    setState(() {
+      _items = _items.map((draft) {
+        if (draft.food.id != id || draft.quantity <= 1) return draft;
+        return draft.copyWith(quantity: draft.quantity - 1);
+      }).toList();
+    });
+  }
+
+  List<FoodItem> _itemsForFridge() {
+    return _items.expand((draft) => draft.toFoodItemsForFridge()).toList();
+  }
+
+  int get _totalUnits =>
+      _items.fold<int>(0, (sum, draft) => sum + draft.quantity);
 
   @override
   Widget build(BuildContext context) {
@@ -452,8 +480,10 @@ class _ScanValidationSheetState extends State<_ScanValidationSheet> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    '${_items.length} produit${_items.length > 1 ? 's' : ''} '
-                    'sélectionné${_items.length > 1 ? 's' : ''}',
+                    _items.isEmpty
+                        ? 'Aucun produit sélectionné'
+                        : '${_items.length} produit${_items.length > 1 ? 's' : ''} · '
+                            '$_totalUnits unité${_totalUnits > 1 ? 's' : ''}',
                     style: theme.textTheme.labelLarge?.copyWith(
                       color: colorScheme.primary,
                       fontWeight: FontWeight.w600,
@@ -470,10 +500,12 @@ class _ScanValidationSheetState extends State<_ScanValidationSheet> {
                 itemCount: _items.length,
                 separatorBuilder: (context, _) => const SizedBox(height: 10),
                 itemBuilder: (context, index) {
-                  final item = _items[index];
+                  final draft = _items[index];
                   return _DetectedProductTile(
-                    item: item,
-                    onRemove: () => _removeItem(item.id),
+                    draft: draft,
+                    onIncrement: () => _incrementQuantity(draft.food.id),
+                    onDecrement: () => _decrementQuantity(draft.food.id),
+                    onRemove: () => _removeItem(draft.food.id),
                   );
                 },
               ),
@@ -509,7 +541,7 @@ class _ScanValidationSheetState extends State<_ScanValidationSheet> {
                   Expanded(
                     child: FilledButton(
                       onPressed: canValidate
-                          ? () => widget.onValidate(List<FoodItem>.from(_items))
+                          ? () => widget.onValidate(_itemsForFridge())
                           : null,
                       style: FilledButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 14),
@@ -532,21 +564,26 @@ class _ScanValidationSheetState extends State<_ScanValidationSheet> {
 
 class _DetectedProductTile extends StatelessWidget {
   const _DetectedProductTile({
-    required this.item,
+    required this.draft,
+    required this.onIncrement,
+    required this.onDecrement,
     required this.onRemove,
   });
 
-  final FoodItem item;
+  final DetectedProductDraft draft;
+  final VoidCallback onIncrement;
+  final VoidCallback onDecrement;
   final VoidCallback onRemove;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final expiryLabel = ExpiryHelper.labelFor(item.expiryDate);
+    final food = draft.food;
+    final expiryLabel = ExpiryHelper.labelFor(food.expiryDate);
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
         borderRadius: BorderRadius.circular(16),
@@ -554,34 +591,135 @@ class _DetectedProductTile extends StatelessWidget {
           color: colorScheme.outlineVariant.withValues(alpha: 0.45),
         ),
       ),
-      child: Row(
-        children: [
-          Text(item.emoji, style: const TextStyle(fontSize: 26)),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.name,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final stackControls = constraints.maxWidth < 340;
+
+          final nameColumn = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                food.name,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  expiryLabel,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                expiryLabel,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          );
+
+          final controlsRow = Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _QuantityStepper(
+                quantity: draft.quantity,
+                onDecrement: onDecrement,
+                onIncrement: onIncrement,
+              ),
+              IconButton(
+                onPressed: onRemove,
+                icon: Icon(Icons.close_rounded, color: colorScheme.error),
+                tooltip: 'Retirer',
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
+          );
+
+          if (stackControls) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(food.emoji, style: const TextStyle(fontSize: 26)),
+                    const SizedBox(width: 12),
+                    Expanded(child: nameColumn),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: controlsRow,
                 ),
               ],
+            );
+          }
+
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Text(food.emoji, style: const TextStyle(fontSize: 26)),
+              const SizedBox(width: 12),
+              Expanded(child: nameColumn),
+              controlsRow,
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _QuantityStepper extends StatelessWidget {
+  const _QuantityStepper({
+    required this.quantity,
+    required this.onDecrement,
+    required this.onIncrement,
+  });
+
+  final int quantity;
+  final VoidCallback onDecrement;
+  final VoidCallback onIncrement;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final canDecrement = quantity > 1;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.55),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            onPressed: canDecrement ? onDecrement : null,
+            icon: const Icon(Icons.remove_rounded),
+            tooltip: 'Diminuer',
+            visualDensity: VisualDensity.compact,
+            iconSize: 20,
+          ),
+          SizedBox(
+            width: 28,
+            child: Text(
+              '$quantity',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ),
           IconButton(
-            onPressed: onRemove,
-            icon: Icon(Icons.close_rounded, color: colorScheme.error),
-            tooltip: 'Retirer',
+            onPressed: onIncrement,
+            icon: const Icon(Icons.add_rounded),
+            tooltip: 'Augmenter',
+            visualDensity: VisualDensity.compact,
+            iconSize: 20,
           ),
         ],
       ),
