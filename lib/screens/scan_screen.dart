@@ -23,7 +23,6 @@ class ScanScreen extends StatefulWidget {
 class _ScanScreenState extends State<ScanScreen> {
   final _imagePicker = ImagePicker();
 
-  XFile? _pickedImage;
   Uint8List? _pickedImageBytes;
   bool _isScanning = false;
 
@@ -109,10 +108,7 @@ class _ScanScreenState extends State<ScanScreen> {
       final bytes = await image.readAsBytes();
       if (!mounted) return;
 
-      setState(() {
-        _pickedImage = image;
-        _pickedImageBytes = bytes;
-      });
+      setState(() => _pickedImageBytes = bytes);
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -125,15 +121,8 @@ class _ScanScreenState extends State<ScanScreen> {
     }
   }
 
-  void _clearPickedImage() {
-    setState(() {
-      _pickedImage = null;
-      _pickedImageBytes = null;
-    });
-  }
-
   Future<void> _analyzeTicket() async {
-    if (_isScanning || _pickedImage == null) return;
+    if (_isScanning || _pickedImageBytes == null) return;
 
     setState(() => _isScanning = true);
 
@@ -255,63 +244,107 @@ class _ScanScreenState extends State<ScanScreen> {
   }
 
   Widget _buildPreviewContent(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     final imageBytes = _pickedImageBytes!;
+    final previewMaxHeight = MediaQuery.sizeOf(context).height * 0.42;
 
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const Text(
-          'Aperçu du ticket',
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          'Vérifie que le ticket est lisible avant l’analyse.',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 16,
-            color: colorScheme.onSurfaceVariant,
-          ),
-        ),
-        const SizedBox(height: 24),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: AspectRatio(
-            aspectRatio: 3 / 4,
-            child: Image.memory(
-              imageBytes,
-              fit: BoxFit.cover,
-              gaplessPlayback: true,
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Aperçu du ticket',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.3,
             ),
           ),
-        ),
-        const SizedBox(height: 24),
-        SizedBox(
-          width: double.infinity,
-          child: FilledButton.icon(
+          const SizedBox(height: 12),
+          Text(
+            'Vérifie que le ticket est lisible avant l’analyse.',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyLarge?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 24),
+          _TicketPreviewCard(
+            imageBytes: imageBytes,
+            maxHeight: previewMaxHeight,
+          ),
+          const SizedBox(height: 24),
+          FilledButton.icon(
             onPressed: _isScanning ? null : _analyzeTicket,
             icon: const Icon(Icons.document_scanner_outlined),
             label: const Text('Analyser le ticket'),
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
           ),
-        ),
-        const SizedBox(height: 12),
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
             onPressed: _isScanning ? null : _showImageSourceSheet,
             icon: const Icon(Icons.photo_camera_outlined),
-            label: const Text('Changer la photo'),
+            label: const Text('Reprendre une photo'),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Carte d’aperçu du ticket (style aligné sur les cartes du frigo).
+class _TicketPreviewCard extends StatelessWidget {
+  const _TicketPreviewCard({
+    required this.imageBytes,
+    required this.maxHeight,
+  });
+
+  final Uint8List imageBytes;
+  final double maxHeight;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      width: double.infinity,
+      constraints: BoxConstraints(maxHeight: maxHeight),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.45),
         ),
-        const SizedBox(height: 8),
-        TextButton(
-          onPressed: _isScanning ? null : _clearPickedImage,
-          child: const Text('Supprimer l’aperçu'),
+        boxShadow: [
+          BoxShadow(
+            color: colorScheme.shadow.withValues(alpha: 0.05),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Image.memory(
+          imageBytes,
+          fit: BoxFit.contain,
+          gaplessPlayback: true,
+          filterQuality: FilterQuality.medium,
         ),
-      ],
+      ),
     );
   }
 }
