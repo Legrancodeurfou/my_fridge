@@ -44,33 +44,36 @@ class _RecipesContent extends StatelessWidget {
           : recipes.isEmpty
               ? const _NoMatchingRecipesView()
               : ListView(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-              children: [
-                Text(
-                  'Idées avec ton frigo',
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.3,
-                  ),
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                  children: [
+                    Text(
+                      'Idées avec ton frigo',
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '${recipes.length} recette${recipes.length > 1 ? 's' : ''} '
+                      'basée${recipes.length > 1 ? 's' : ''} sur '
+                      '${foods.length} aliment${foods.length > 1 ? 's' : ''}',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    ...recipes.map(
+                      (recipe) => Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _RecipeCard(
+                          recipe: recipe,
+                          foods: foods,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  '${recipes.length} recette${recipes.length > 1 ? 's' : ''} '
-                  'basée${recipes.length > 1 ? 's' : ''} sur '
-                  '${foods.length} aliment${foods.length > 1 ? 's' : ''}',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                ...recipes.map(
-                  (recipe) => Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: _RecipeCard(recipe: recipe),
-                  ),
-                ),
-              ],
-            ),
     );
   }
 }
@@ -79,20 +82,47 @@ class _RecipesContent extends StatelessWidget {
 // Catalogue fictif — remplaçable par une API ou un moteur de suggestions.
 // ---------------------------------------------------------------------------
 
+class RecipeIngredient {
+  const RecipeIngredient({
+    required this.label,
+    required this.keywords,
+  });
+
+  final String label;
+  final List<String> keywords;
+}
+
 class RecipeSuggestion {
   const RecipeSuggestion({
     required this.emoji,
     required this.name,
     required this.time,
-    required this.ingredients,
     required this.description,
+    required this.requiredIngredients,
+    required this.steps,
   });
 
   final String emoji;
   final String name;
   final String time;
-  final List<String> ingredients;
   final String description;
+  final List<RecipeIngredient> requiredIngredients;
+  final List<String> steps;
+
+  List<String> get ingredients =>
+      requiredIngredients.map((item) => item.label).toList();
+}
+
+class RecipeIngredientMatch {
+  const RecipeIngredientMatch({
+    required this.ingredient,
+    required this.isAvailable,
+    this.matchedFoodName,
+  });
+
+  final RecipeIngredient ingredient;
+  final bool isAvailable;
+  final String? matchedFoodName;
 }
 
 abstract final class RecipeCatalog {
@@ -103,7 +133,9 @@ abstract final class RecipeCatalog {
     final recipes = <RecipeSuggestion>[];
 
     void addIf(bool condition, RecipeSuggestion recipe) {
-      if (condition && recipes.length < 3 && !recipes.any((r) => r.name == recipe.name)) {
+      if (condition &&
+          recipes.length < 3 &&
+          !recipes.any((item) => item.name == recipe.name)) {
         recipes.add(recipe);
       }
     }
@@ -114,9 +146,29 @@ abstract final class RecipeCatalog {
         emoji: '🍝',
         name: 'Pâtes à la crème',
         time: '20 min',
-        ingredients: ['Pâtes', 'Crème fraîche', 'Emmental'],
         description:
             'Des pâtes onctueuses avec la crème et le fromage déjà dans ton frigo.',
+        requiredIngredients: [
+          RecipeIngredient(
+            label: 'Pâtes',
+            keywords: ['pâte', 'pate', 'pâtes', 'pates'],
+          ),
+          RecipeIngredient(
+            label: 'Crème fraîche',
+            keywords: ['crème', 'creme'],
+          ),
+          RecipeIngredient(
+            label: 'Emmental',
+            keywords: ['emmental', 'fromage'],
+          ),
+        ],
+        steps: [
+          'Fais cuire les pâtes dans une grande casserole d’eau bouillante salée.',
+          'Égoutte les pâtes en gardant un peu d’eau de cuisson.',
+          'Dans la poêle, fais chauffer la crème fraîche à feu doux.',
+          'Ajoute le fromage râpé et mélange jusqu’à obtenir une sauce lisse.',
+          'Incorpore les pâtes, ajuste avec l’eau de cuisson si besoin, puis sers.',
+        ],
       ),
     );
 
@@ -126,9 +178,22 @@ abstract final class RecipeCatalog {
         emoji: '🥪',
         name: 'Croque jambon express',
         time: '12 min',
-        ingredients: ['Jambon', 'Emmental', 'Pain'],
         description:
             'Un classique rapide pour utiliser ton jambon avant la date limite.',
+        requiredIngredients: [
+          RecipeIngredient(label: 'Jambon', keywords: ['jambon']),
+          RecipeIngredient(
+            label: 'Emmental',
+            keywords: ['emmental', 'fromage'],
+          ),
+          RecipeIngredient(label: 'Pain', keywords: ['pain']),
+        ],
+        steps: [
+          'Tartine deux tranches de pain avec un peu de crème ou de beurre.',
+          'Ajoute le jambon et le fromage entre les tranches.',
+          'Fais griller 3 à 4 minutes de chaque côté à la poêle.',
+          'Sers chaud lorsque le fromage est fondant.',
+        ],
       ),
     );
 
@@ -138,9 +203,19 @@ abstract final class RecipeCatalog {
         emoji: '🥗',
         name: 'Salade fraîche du frigo',
         time: '10 min',
-        ingredients: ['Salade', 'Tomates', 'Œufs'],
         description:
             'Une salade légère et croquante avec les produits frais disponibles.',
+        requiredIngredients: [
+          RecipeIngredient(label: 'Salade', keywords: ['salade']),
+          RecipeIngredient(label: 'Tomates', keywords: ['tomate']),
+          RecipeIngredient(label: 'Œufs', keywords: ['œuf', 'oeuf']),
+        ],
+        steps: [
+          'Lave et essore la salade, puis place-la dans un saladier.',
+          'Coupe les tomates en quartiers et ajoute-les.',
+          'Cuis les œufs 8 minutes, écale-les et coupe-les en deux.',
+          'Assaisonne avec huile, vinaigre, sel et poivre avant de servir.',
+        ],
       ),
     );
 
@@ -150,8 +225,25 @@ abstract final class RecipeCatalog {
         emoji: '🍳',
         name: 'Omelette fromage',
         time: '10 min',
-        ingredients: ['Œufs', 'Emmental', 'Crème fraîche'],
-        description: 'Parfaite pour un repas express avec tes produits laitiers.',
+        description:
+            'Parfaite pour un repas express avec tes produits laitiers.',
+        requiredIngredients: [
+          RecipeIngredient(label: 'Œufs', keywords: ['œuf', 'oeuf']),
+          RecipeIngredient(
+            label: 'Emmental',
+            keywords: ['emmental', 'fromage'],
+          ),
+          RecipeIngredient(
+            label: 'Crème fraîche',
+            keywords: ['crème', 'creme'],
+          ),
+        ],
+        steps: [
+          'Bat les œufs avec une pincée de sel et de poivre.',
+          'Verse le mélange dans une poêle chaude légèrement beurrée.',
+          'Lorsque l’omelette commence à prendre, ajoute le fromage.',
+          'Plie l’omelette en deux et laisse fondre 1 minute avant de servir.',
+        ],
       ),
     );
 
@@ -161,8 +253,25 @@ abstract final class RecipeCatalog {
         emoji: '🍅',
         name: 'Pâtes tomate fromage',
         time: '15 min',
-        ingredients: ['Pâtes', 'Tomates', 'Emmental'],
-        description: 'Un plat simple qui combine tes ingrédients du quotidien.',
+        description:
+            'Un plat simple qui combine tes ingrédients du quotidien.',
+        requiredIngredients: [
+          RecipeIngredient(
+            label: 'Pâtes',
+            keywords: ['pâte', 'pate', 'pâtes', 'pates'],
+          ),
+          RecipeIngredient(label: 'Tomates', keywords: ['tomate']),
+          RecipeIngredient(
+            label: 'Emmental',
+            keywords: ['emmental', 'fromage'],
+          ),
+        ],
+        steps: [
+          'Cuire les pâtes al dente dans l’eau bouillante salée.',
+          'Coupe les tomates et fais-les revenir 5 minutes à la poêle.',
+          'Égoutte les pâtes et mélange-les avec les tomates.',
+          'Parseme de fromage râpé et sers immédiatement.',
+        ],
       ),
     );
 
@@ -172,8 +281,27 @@ abstract final class RecipeCatalog {
         emoji: '🥣',
         name: 'Gratin crémeux',
         time: '25 min',
-        ingredients: ['Pommes de terre', 'Crème fraîche', 'Emmental'],
         description: 'Un gratin réconfortant avec tes produits laitiers.',
+        requiredIngredients: [
+          RecipeIngredient(
+            label: 'Pommes de terre',
+            keywords: ['pomme de terre', 'pommes de terre'],
+          ),
+          RecipeIngredient(
+            label: 'Crème fraîche',
+            keywords: ['crème', 'creme'],
+          ),
+          RecipeIngredient(
+            label: 'Emmental',
+            keywords: ['emmental', 'fromage'],
+          ),
+        ],
+        steps: [
+          'Préchauffe le four à 200 °C.',
+          'Coupe les pommes de terre en fines rondelles.',
+          'Dispose-les dans un plat, nappe de crème et saupoudre de fromage.',
+          'Enfourne 20 minutes jusqu’à ce que le gratin soit doré.',
+        ],
       ),
     );
 
@@ -183,12 +311,57 @@ abstract final class RecipeCatalog {
         emoji: '🥩',
         name: 'Bolognaise express',
         time: '18 min',
-        ingredients: ['Steak haché', 'Tomates', 'Pâtes'],
         description: 'Idéal pour consommer ta viande en priorité.',
+        requiredIngredients: [
+          RecipeIngredient(
+            label: 'Steak haché',
+            keywords: ['steak', 'haché', 'hache', 'viande'],
+          ),
+          RecipeIngredient(label: 'Tomates', keywords: ['tomate']),
+          RecipeIngredient(
+            label: 'Pâtes',
+            keywords: ['pâte', 'pate', 'pâtes', 'pates'],
+          ),
+        ],
+        steps: [
+          'Fais revenir le steak haché dans une poêle chaude.',
+          'Ajoute les tomates coupées et laisse mijoter 8 minutes.',
+          'Pendant ce temps, cuire les pâtes.',
+          'Mélange les pâtes avec la sauce et sers chaud.',
+        ],
       ),
     );
 
     return recipes.take(3).toList();
+  }
+
+  static List<RecipeIngredientMatch> matchIngredients(
+    RecipeSuggestion recipe,
+    List<FoodItem> foods,
+  ) {
+    final foodNames = foods.map((food) => food.name.toLowerCase()).toList();
+
+    return recipe.requiredIngredients.map((ingredient) {
+      for (final food in foods) {
+        final name = food.name.toLowerCase();
+        if (ingredient.keywords.any((keyword) => name.contains(keyword))) {
+          return RecipeIngredientMatch(
+            ingredient: ingredient,
+            isAvailable: true,
+            matchedFoodName: food.name,
+          );
+        }
+      }
+
+      final hasMatch = ingredient.keywords.any(
+        (keyword) => foodNames.any((name) => name.contains(keyword)),
+      );
+
+      return RecipeIngredientMatch(
+        ingredient: ingredient,
+        isAvailable: hasMatch,
+      );
+    }).toList();
   }
 
   static bool _hasAny(List<String> foodNames, List<String> keywords) {
@@ -203,16 +376,25 @@ abstract final class RecipeCatalog {
 // ---------------------------------------------------------------------------
 
 class _RecipeCard extends StatelessWidget {
-  const _RecipeCard({required this.recipe});
+  const _RecipeCard({
+    required this.recipe,
+    required this.foods,
+  });
 
   final RecipeSuggestion recipe;
+  final List<FoodItem> foods;
 
   void _showRecipeDetails(BuildContext context) {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => _RecipeDetailSheet(recipe: recipe),
+      builder: (sheetContext) {
+        return _RecipeDetailSheet(
+          recipe: recipe,
+          foods: foods,
+        );
+      },
     );
   }
 
@@ -220,6 +402,8 @@ class _RecipeCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final matches = RecipeCatalog.matchIngredients(recipe, foods);
+    final availableCount = matches.where((item) => item.isAvailable).length;
 
     return Material(
       color: colorScheme.surface,
@@ -287,7 +471,7 @@ class _RecipeCard extends StatelessWidget {
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Text(
-                              'Avec ton frigo',
+                              'Avec ton frigo · $availableCount/${matches.length}',
                               style: theme.textTheme.labelMedium?.copyWith(
                                 color: colorScheme.primary,
                                 fontWeight: FontWeight.w600,
@@ -329,24 +513,11 @@ class _RecipeCard extends StatelessWidget {
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
-                  children: recipe.ingredients
+                  children: matches
                       .map(
-                        (ingredient) => Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: colorScheme.surfaceContainerHighest
-                                .withValues(alpha: 0.5),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            ingredient,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
+                        (match) => _IngredientChip(
+                          label: match.ingredient.label,
+                          isAvailable: match.isAvailable,
                         ),
                       )
                       .toList(),
@@ -374,120 +545,307 @@ class _RecipeCard extends StatelessWidget {
   }
 }
 
+class _IngredientChip extends StatelessWidget {
+  const _IngredientChip({
+    required this.label,
+    required this.isAvailable,
+  });
+
+  final String label;
+  final bool isAvailable;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = isAvailable ? const Color(0xFF43A047) : const Color(0xFFE53935);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isAvailable ? Icons.check_circle_outline : Icons.cancel_outlined,
+            size: 14,
+            color: color,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: theme.textTheme.bodySmall?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _RecipeDetailSheet extends StatelessWidget {
-  const _RecipeDetailSheet({required this.recipe});
+  const _RecipeDetailSheet({
+    required this.recipe,
+    required this.foods,
+  });
 
   final RecipeSuggestion recipe;
+  final List<FoodItem> foods;
+
+  void _onCooked(BuildContext context) {
+    Navigator.pop(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        content: Text('Bon appétit ! « ${recipe.name} » est noté.'),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final matches = RecipeCatalog.matchIngredients(recipe, foods);
+    final available = matches.where((item) => item.isAvailable).toList();
+    final missing = matches.where((item) => !item.isAvailable).toList();
 
     return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * 0.9,
+      ),
       decoration: BoxDecoration(
         color: colorScheme.surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: SafeArea(
         top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: colorScheme.outlineVariant,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 12),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: colorScheme.outlineVariant,
+                borderRadius: BorderRadius.circular(2),
               ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Text(recipe.emoji, style: const TextStyle(fontSize: 36)),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      recipe.name,
-                      style: theme.textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w800,
+            ),
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(recipe.emoji, style: const TextStyle(fontSize: 40)),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                recipe.name,
+                                style: theme.textTheme.titleLarge?.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -0.3,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.schedule_rounded,
+                                    size: 18,
+                                    color: colorScheme.primary,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    recipe.time,
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: colorScheme.primary
+                                          .withValues(alpha: 0.12),
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: Text(
+                                      'Avec ton frigo',
+                                      style: theme.textTheme.labelMedium
+                                          ?.copyWith(
+                                        color: colorScheme.primary,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      recipe.description,
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        height: 1.5,
+                        color: colorScheme.onSurfaceVariant,
                       ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(Icons.schedule_rounded, size: 18, color: colorScheme.primary),
-                  const SizedBox(width: 6),
-                  Text(
-                    recipe.time,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: colorScheme.primary.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      'Avec ton frigo',
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        color: colorScheme.primary,
-                        fontWeight: FontWeight.w600,
+                    const SizedBox(height: 24),
+                    Text(
+                      'Depuis ton frigo',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              Text(
-                recipe.description,
-                style: theme.textTheme.bodyLarge?.copyWith(
-                  height: 1.5,
-                  color: colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Ingrédients',
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 8),
-              ...recipe.ingredients.map(
-                (ingredient) => Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.check_circle_outline_rounded,
-                        size: 18,
-                        color: colorScheme.primary,
+                    const SizedBox(height: 10),
+                    if (available.isEmpty)
+                      Text(
+                        'Aucun ingrédient disponible pour l’instant.',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      )
+                    else
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: available
+                            .map(
+                              (match) => _IngredientChip(
+                                label: match.matchedFoodName ?? match.ingredient.label,
+                                isAvailable: true,
+                              ),
+                            )
+                            .toList(),
                       ),
-                      const SizedBox(width: 8),
-                      Text(ingredient),
+                    if (missing.isNotEmpty) ...[
+                      const SizedBox(height: 20),
+                      Text(
+                        'Ingrédients manquants',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: colorScheme.error,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: missing
+                            .map(
+                              (match) => _IngredientChip(
+                                label: match.ingredient.label,
+                                isAvailable: false,
+                              ),
+                            )
+                            .toList(),
+                      ),
                     ],
+                    const SizedBox(height: 24),
+                    Text(
+                      'Étapes',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    ...recipe.steps.asMap().entries.map(
+                      (entry) => _RecipeStepTile(
+                        stepNumber: entry.key + 1,
+                        text: entry.value,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+              child: FilledButton.icon(
+                onPressed: () => _onCooked(context),
+                icon: const Icon(Icons.restaurant_rounded),
+                label: const Text('J’ai cuisiné'),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
                   ),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
+      ),
+    );
+  }
+}
+
+class _RecipeStepTile extends StatelessWidget {
+  const _RecipeStepTile({
+    required this.stepNumber,
+    required this.text,
+  });
+
+  final int stepNumber;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 28,
+            height: 28,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: colorScheme.primaryContainer.withValues(alpha: 0.6),
+              shape: BoxShape.circle,
+            ),
+            child: Text(
+              '$stepNumber',
+              style: theme.textTheme.labelLarge?.copyWith(
+                fontWeight: FontWeight.w800,
+                color: colorScheme.primary,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                text,
+                style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
