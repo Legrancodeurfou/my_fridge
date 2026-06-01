@@ -2,6 +2,8 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:flutter/foundation.dart';
+import 'package:file_picker/file_picker.dart';
 
 import '../data/fridge_store.dart';
 import '../models/detected_product_draft.dart';
@@ -96,33 +98,50 @@ class _ScanScreenState extends State<ScanScreen> {
     await _pickImage(source);
   }
 
-  Future<void> _pickImage(ImageSource source) async {
-    try {
-      final image = await _imagePicker.pickImage(
-        source: source,
-        imageQuality: 85,
+Future<void> _pickImage(ImageSource source) async {
+  try {
+    if (kIsWeb) {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        withData: true,
       );
 
       if (!mounted) return;
+      if (result == null || result.files.isEmpty) return;
 
-      // Annulation : pas de changement d’état (conserve l’aperçu précédent si existant).
-      if (image == null) return;
+      final bytes = result.files.first.bytes;
 
-      final bytes = await image.readAsBytes();
-      if (!mounted) return;
+      if (bytes == null) {
+        throw Exception('Image introuvable');
+      }
 
       setState(() => _pickedImageBytes = bytes);
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          content: Text('Impossible d’accéder à la ${source == ImageSource.camera ? 'caméra' : 'galerie'}'),
-        ),
-      );
+      return;
     }
+
+    final image = await _imagePicker.pickImage(
+      source: source,
+      imageQuality: 85,
+    );
+
+    if (!mounted) return;
+    if (image == null) return;
+
+    final bytes = await image.readAsBytes();
+
+    if (!mounted) return;
+
+    setState(() => _pickedImageBytes = bytes);
+  } catch (e) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Erreur : $e'),
+      ),
+    );
   }
+}
 
   Future<void> _analyzeTicket() async {
     if (_isScanning || _pickedImageBytes == null) return;
