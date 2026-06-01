@@ -133,13 +133,13 @@ class RecipeIngredientMatch {
   final bool isAvailable;
   final String? matchedFoodName;
   final String? matchedFoodId;
-  final int? matchedFoodAmount;
+  final double? matchedFoodAmount;
   final String? matchedFoodUnit;
   final String? matchedFoodAmountLabel;
 
   bool get hasFoodInFridge => matchedFoodId != null;
 
-  int get missingAmount {
+  double get missingAmount {
     final amount = matchedFoodAmount ?? 0;
     final missing = ingredient.requiredAmount - amount;
     return missing < 0 ? 0 : missing;
@@ -482,15 +482,16 @@ abstract final class RecipeCatalog {
         .toList();
   }
 
-  static Map<String, int> consumptionAmounts(
-    RecipeSuggestion recipe,
-    List<FoodItem> foods,
-  ) {
-    final result = <String, int>{};
+  static Map<String, double> consumptionAmounts(
+  RecipeSuggestion recipe,
+  List<FoodItem> foods,
+) {
+    final result = <String, double>{};
 
     for (final match in matchIngredients(recipe, foods)) {
       if (!match.isAvailable || match.matchedFoodId == null) continue;
-      result[match.matchedFoodId!] = match.ingredient.requiredAmount;
+      result[match.matchedFoodId!] =
+        match.ingredient.requiredAmount.toDouble();
     }
 
     return result;
@@ -792,7 +793,7 @@ class _RecipeDetailSheet extends StatelessWidget {
     if (choice == null || choice == _CookedChoice.cancel) return;
 
     if (choice == _CookedChoice.remove) {
-      store.consumeFoodQuantities(consumptionAmounts);
+      store.consumeFoodAmounts(consumptionAmounts);
     }
 
     if (sheetContext.mounted) Navigator.pop(sheetContext);
