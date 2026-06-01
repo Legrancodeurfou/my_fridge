@@ -1,33 +1,47 @@
 import 'package:flutter/material.dart';
 
 import '../data/fridge_store.dart';
+import '../data/profile_store.dart';
 import '../models/food.dart';
 
 class RecipesScreen extends StatelessWidget {
-  const RecipesScreen({super.key, required this.store});
+  const RecipesScreen({
+    super.key,
+    required this.store,
+    required this.profileStore,
+  });
 
   final FridgeStore store;
+  final ProfileStore profileStore;
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: store,
-      builder: (context, _) => _RecipesContent(store: store),
+      listenable: Listenable.merge([store, profileStore]),
+      builder: (context, _) => _RecipesContent(
+        store: store,
+        profileStore: profileStore,
+      ),
     );
   }
 }
 
 class _RecipesContent extends StatelessWidget {
-  const _RecipesContent({required this.store});
+  const _RecipesContent({
+    required this.store,
+    required this.profileStore,
+  });
 
   final FridgeStore store;
+  final ProfileStore profileStore;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final foods = store.foods;
-    final recipes = RecipeCatalog.suggestFor(foods);
+    final profile = profileStore.profile;
+    final recipes = RecipeCatalog.suggestFor(foods, profile: profile);
 
     return Scaffold(
       backgroundColor: colorScheme.surfaceContainerLowest,
@@ -61,6 +75,8 @@ class _RecipesContent extends StatelessWidget {
                         color: colorScheme.onSurfaceVariant,
                       ),
                     ),
+                    const SizedBox(height: 12),
+                    _ProfileRecipeBanner(profile: profile),
                     const SizedBox(height: 20),
                     ...recipes.map(
                       (recipe) => Padding(
@@ -91,7 +107,7 @@ class RecipeIngredient {
 
   final String label;
   final List<String> keywords;
-  final int requiredAmount;
+  final double requiredAmount;
   final String requiredUnit;
 
   String get requiredAmountLabel => '$requiredAmount $requiredUnit';
@@ -105,6 +121,10 @@ class RecipeSuggestion {
     required this.description,
     required this.requiredIngredients,
     required this.steps,
+    this.difficulty = RecipeDifficulty.easy,
+    this.requiresOven = false,
+    this.requiresAirfryer = false,
+    this.requiresMicrowave = false,
   });
 
   final String emoji;
@@ -113,10 +133,21 @@ class RecipeSuggestion {
   final String description;
   final List<RecipeIngredient> requiredIngredients;
   final List<String> steps;
+  final RecipeDifficulty difficulty;
+  final bool requiresOven;
+  final bool requiresAirfryer;
+  final bool requiresMicrowave;
 
   List<String> get ingredients =>
       requiredIngredients.map((item) => item.label).toList();
+
+  int get estimatedMinutes {
+    final match = RegExp(r'\d+').firstMatch(time);
+    return match == null ? 999 : int.parse(match.group(0)!);
+  }
 }
+
+enum RecipeDifficulty { beginner, easy, intermediate }
 
 class RecipeIngredientMatch {
   const RecipeIngredientMatch({
@@ -164,7 +195,10 @@ class RecipeIngredientMatch {
 }
 
 abstract final class RecipeCatalog {
-  static List<RecipeSuggestion> suggestFor(List<FoodItem> foods) {
+  static List<RecipeSuggestion> suggestFor(
+    List<FoodItem> foods, {
+    ProfileData? profile,
+  }) {
     if (foods.isEmpty) return [];
 
     final names = foods.map((food) => food.name.toLowerCase()).toList();
@@ -370,6 +404,8 @@ abstract final class RecipeCatalog {
         emoji: '🥣',
         name: 'Gratin crémeux',
         time: '25 min',
+        difficulty: RecipeDifficulty.intermediate,
+        requiresOven: true,
         description: 'Un gratin réconfortant avec tes produits laitiers.',
         requiredIngredients: [
           RecipeIngredient(
@@ -406,6 +442,7 @@ abstract final class RecipeCatalog {
         emoji: '🥩',
         name: 'Bolognaise express',
         time: '18 min',
+        difficulty: RecipeDifficulty.intermediate,
         description: 'Idéal pour consommer ta viande en priorité.',
         requiredIngredients: [
           RecipeIngredient(
@@ -436,7 +473,10 @@ abstract final class RecipeCatalog {
       ),
     );
 
-    return recipes.take(3).toList();
+    final filtered = _filterForProfile(recipes, profile);
+    final sorted = _sortForProfile(filtered, profile, foods);
+
+    return sorted.take(3).toList();
   }
 
   static List<RecipeIngredientMatch> matchIngredients(
@@ -483,18 +523,90 @@ abstract final class RecipeCatalog {
   }
 
   static Map<String, double> consumptionAmounts(
-  RecipeSuggestion recipe,
-  List<FoodItem> foods,
-) {
+    RecipeSuggestion recipe,
+    List<FoodItem> foods,
+  ) {
     final result = <String, double>{};
 
     for (final match in matchIngredients(recipe, foods)) {
       if (!match.isAvailable || match.matchedFoodId == null) continue;
-      result[match.matchedFoodId!] =
-        match.ingredient.requiredAmount.toDouble();
+      result[match.matchedFoodId!] = match.ingredient.requiredAmount.toDouble();
     }
 
     return result;
+  }
+
+  static List<RecipeSuggestion> _filterForProfile(
+    List<RecipeSuggestion> recipes,
+    ProfileData? profile,
+  ) {
+    if (profile == null) return recipes;
+
+    return recipes.where((recipe) {
+      if (profile.cookingLevel == CookingLevel.beginner &&
+          recipe.difficulty == RecipeDifficulty.intermediate) {
+        return false;
+      }
+
+      if (recipe.requiresOven && !profile.hasOven) return false;
+      if (recipe.requiresAirfryer && !profile.hasAirfryer) return false;
+      if (recipe.requiresMicrowave && !profile.hasMicrowave) return false;
+
+      return true;
+    }).toList();
+  }
+
+  static List<RecipeSuggestion> _sortForProfile(
+    List<RecipeSuggestion> recipes,
+    ProfileData? profile,
+    List<FoodItem> foods,
+  ) {
+    final sorted = [...recipes];
+
+    if (profile == null) return sorted;
+
+    if (profile.goal == ProfileGoal.saveTime) {
+      sorted.sort((a, b) => a.estimatedMinutes.compareTo(b.estimatedMinutes));
+      return sorted;
+    }
+
+    if (profile.goal == ProfileGoal.reduceWaste) {
+      sorted.sort((a, b) {
+        final urgencyA = _recipeUrgencyScore(a, foods);
+        final urgencyB = _recipeUrgencyScore(b, foods);
+        return urgencyB.compareTo(urgencyA);
+      });
+      return sorted;
+    }
+
+    if (profile.cookingLevel == CookingLevel.beginner) {
+      sorted.sort((a, b) => a.estimatedMinutes.compareTo(b.estimatedMinutes));
+    }
+
+    return sorted;
+  }
+
+  static int _recipeUrgencyScore(RecipeSuggestion recipe, List<FoodItem> foods) {
+    var score = 0;
+
+    for (final match in matchIngredients(recipe, foods)) {
+      if (!match.isAvailable || match.matchedFoodId == null) continue;
+
+      final food = foods.firstWhere((item) => item.id == match.matchedFoodId);
+      final days = ExpiryHelper.daysUntilExpiry(food.expiryDate);
+
+      if (days <= 0) {
+        score += 100;
+      } else if (days == 1) {
+        score += 60;
+      } else if (days < 3) {
+        score += 30;
+      } else {
+        score += 5;
+      }
+    }
+
+    return score;
   }
 
   static bool _hasAny(List<String> foodNames, List<String> keywords) {
@@ -507,6 +619,45 @@ abstract final class RecipeCatalog {
 // ---------------------------------------------------------------------------
 // Composants UI
 // ---------------------------------------------------------------------------
+
+
+class _ProfileRecipeBanner extends StatelessWidget {
+  const _ProfileRecipeBanner({required this.profile});
+
+  final ProfileData profile;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: colorScheme.primary.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colorScheme.primary.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.tune_rounded, color: colorScheme.primary, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Adapté à ton profil : ${profile.cookingLevel.label.toLowerCase()}, '
+              '${profile.goal.label.toLowerCase()}.',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onSurface,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _RecipeCard extends StatelessWidget {
   const _RecipeCard({

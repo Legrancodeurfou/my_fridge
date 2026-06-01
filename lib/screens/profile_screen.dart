@@ -1,207 +1,130 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
+import '../data/profile_store.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
+  const ProfileScreen({super.key, required this.store});
+
+  final ProfileStore store;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  static const _nameKey = 'profile_name';
-  static const _levelKey = 'profile_cooking_level';
-  static const _goalKey = 'profile_goal';
-  static const _airfryerKey = 'profile_airfryer';
-  static const _ovenKey = 'profile_oven';
-  static const _microwaveKey = 'profile_microwave';
-  static const _thermomixKey = 'profile_thermomix';
-
-  final _nameController = TextEditingController();
-
-  String _cookingLevel = 'Intermédiaire';
-  String _goal = 'Réduire le gaspillage';
-
-  bool _hasAirfryer = false;
-  bool _hasOven = true;
-  bool _hasMicrowave = true;
-  bool _hasThermomix = false;
-
-  bool _isLoading = true;
-
-  final List<String> _levels = [
-    'Débutant',
-    'Intermédiaire',
-    'Confirmé',
-  ];
-
-  final List<String> _goals = [
-    'Économiser',
-    'Manger plus sain',
-    'Réduire le gaspillage',
-    'Gagner du temps',
-  ];
+  late final TextEditingController _nameController;
 
   @override
   void initState() {
     super.initState();
-    _loadProfile();
-    _nameController.addListener(_saveName);
+    _nameController = TextEditingController(text: widget.store.profile.name);
+    _nameController.addListener(_onNameChanged);
   }
 
   @override
   void dispose() {
     _nameController
-      ..removeListener(_saveName)
+      ..removeListener(_onNameChanged)
       ..dispose();
     super.dispose();
   }
 
-  Future<void> _loadProfile() async {
-    final prefs = await SharedPreferences.getInstance();
-
-    _nameController.text = prefs.getString(_nameKey) ?? 'Esteban';
-
-    setState(() {
-      _cookingLevel = prefs.getString(_levelKey) ?? 'Intermédiaire';
-      _goal = prefs.getString(_goalKey) ?? 'Réduire le gaspillage';
-      _hasAirfryer = prefs.getBool(_airfryerKey) ?? false;
-      _hasOven = prefs.getBool(_ovenKey) ?? true;
-      _hasMicrowave = prefs.getBool(_microwaveKey) ?? true;
-      _hasThermomix = prefs.getBool(_thermomixKey) ?? false;
-      _isLoading = false;
-    });
-  }
-
-  Future<void> _saveName() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_nameKey, _nameController.text.trim());
-  }
-
-  Future<void> _saveString(String key, String value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(key, value);
-  }
-
-  Future<void> _saveBool(String key, bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(key, value);
+  void _onNameChanged() {
+    widget.store.updateName(_nameController.text);
   }
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    return ListenableBuilder(
+      listenable: widget.store,
+      builder: (context, _) {
+        final profile = widget.store.profile;
+        final colorScheme = Theme.of(context).colorScheme;
 
-    if (_isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
+        if (_nameController.text != profile.name) {
+          _nameController.text = profile.name;
+          _nameController.selection = TextSelection.fromPosition(
+            TextPosition(offset: _nameController.text.length),
+          );
+        }
 
-    return Scaffold(
-      backgroundColor: colorScheme.surfaceContainerLowest,
-      appBar: AppBar(
-        title: const Text('Profil'),
-        centerTitle: false,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        backgroundColor: colorScheme.surfaceContainerLowest,
-      ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-        children: [
-          _HeaderCard(nameController: _nameController),
-          const SizedBox(height: 16),
-
-          _SectionTitle(title: 'Préférences'),
-          const SizedBox(height: 8),
-
-          _DropdownCard(
-            icon: Icons.restaurant_menu_rounded,
-            title: 'Niveau de cuisine',
-            value: _cookingLevel,
-            items: _levels,
-            onChanged: (value) {
-              if (value == null) return;
-              setState(() => _cookingLevel = value);
-              _saveString(_levelKey, value);
-            },
+        return Scaffold(
+          backgroundColor: colorScheme.surfaceContainerLowest,
+          appBar: AppBar(
+            title: const Text('Profil'),
+            centerTitle: false,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            backgroundColor: colorScheme.surfaceContainerLowest,
           ),
-
-          const SizedBox(height: 12),
-
-          _DropdownCard(
-            icon: Icons.flag_rounded,
-            title: 'Objectif principal',
-            value: _goal,
-            items: _goals,
-            onChanged: (value) {
-              if (value == null) return;
-              setState(() => _goal = value);
-              _saveString(_goalKey, value);
-            },
+          body: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+            children: [
+              _HeaderCard(nameController: _nameController),
+              const SizedBox(height: 16),
+              const _SectionTitle(title: 'Préférences'),
+              const SizedBox(height: 8),
+              _DropdownCard<CookingLevel>(
+                icon: Icons.restaurant_menu_rounded,
+                title: 'Niveau de cuisine',
+                value: profile.cookingLevel,
+                items: CookingLevel.values,
+                labelBuilder: (value) => value.label,
+                onChanged: (value) {
+                  if (value != null) widget.store.updateCookingLevel(value);
+                },
+              ),
+              const SizedBox(height: 12),
+              _DropdownCard<ProfileGoal>(
+                icon: Icons.flag_rounded,
+                title: 'Objectif principal',
+                value: profile.goal,
+                items: ProfileGoal.values,
+                labelBuilder: (value) => value.label,
+                onChanged: (value) {
+                  if (value != null) widget.store.updateGoal(value);
+                },
+              ),
+              const SizedBox(height: 24),
+              const _SectionTitle(title: 'Équipements disponibles'),
+              const SizedBox(height: 8),
+              _SwitchCard(
+                icon: Icons.air_rounded,
+                title: 'Airfryer',
+                value: profile.hasAirfryer,
+                onChanged: widget.store.updateAirfryer,
+              ),
+              const SizedBox(height: 10),
+              _SwitchCard(
+                icon: Icons.local_fire_department_rounded,
+                title: 'Four',
+                value: profile.hasOven,
+                onChanged: widget.store.updateOven,
+              ),
+              const SizedBox(height: 10),
+              _SwitchCard(
+                icon: Icons.microwave_rounded,
+                title: 'Micro-ondes',
+                value: profile.hasMicrowave,
+                onChanged: widget.store.updateMicrowave,
+              ),
+              const SizedBox(height: 10),
+              _SwitchCard(
+                icon: Icons.blender_rounded,
+                title: 'Thermomix',
+                value: profile.hasThermomix,
+                onChanged: widget.store.updateThermomix,
+              ),
+              const SizedBox(height: 24),
+              const _InfoCard(
+                icon: Icons.info_outline_rounded,
+                title: 'Version MVP',
+                subtitle: 'My Fridge MVP v0.1',
+              ),
+            ],
           ),
-
-          const SizedBox(height: 24),
-
-          _SectionTitle(title: 'Équipements disponibles'),
-          const SizedBox(height: 8),
-
-          _SwitchCard(
-            icon: Icons.air_rounded,
-            title: 'Airfryer',
-            value: _hasAirfryer,
-            onChanged: (value) {
-              setState(() => _hasAirfryer = value);
-              _saveBool(_airfryerKey, value);
-            },
-          ),
-
-          const SizedBox(height: 10),
-
-          _SwitchCard(
-            icon: Icons.local_fire_department_rounded,
-            title: 'Four',
-            value: _hasOven,
-            onChanged: (value) {
-              setState(() => _hasOven = value);
-              _saveBool(_ovenKey, value);
-            },
-          ),
-
-          const SizedBox(height: 10),
-
-          _SwitchCard(
-            icon: Icons.microwave_rounded,
-            title: 'Micro-ondes',
-            value: _hasMicrowave,
-            onChanged: (value) {
-              setState(() => _hasMicrowave = value);
-              _saveBool(_microwaveKey, value);
-            },
-          ),
-
-          const SizedBox(height: 10),
-
-          _SwitchCard(
-            icon: Icons.blender_rounded,
-            title: 'Thermomix',
-            value: _hasThermomix,
-            onChanged: (value) {
-              setState(() => _hasThermomix = value);
-              _saveBool(_thermomixKey, value);
-            },
-          ),
-
-          const SizedBox(height: 24),
-
-          _InfoCard(
-            icon: Icons.info_outline_rounded,
-            title: 'Version MVP',
-            subtitle: 'My Fridge MVP v0.1',
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -234,19 +157,13 @@ class _HeaderCard extends StatelessWidget {
           CircleAvatar(
             radius: 48,
             backgroundColor: colorScheme.primaryContainer.withValues(alpha: 0.65),
-            child: Icon(
-              Icons.person_rounded,
-              size: 52,
-              color: colorScheme.primary,
-            ),
+            child: Icon(Icons.person_rounded, size: 52, color: colorScheme.primary),
           ),
           const SizedBox(height: 18),
           TextField(
             controller: nameController,
             textAlign: TextAlign.center,
-            style: theme.textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.w800,
-            ),
+            style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
             decoration: InputDecoration(
               hintText: 'Ton prénom',
               filled: true,
@@ -255,10 +172,7 @@ class _HeaderCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(16),
                 borderSide: BorderSide.none,
               ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 14,
-              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             ),
           ),
         ],
@@ -276,27 +190,27 @@ class _SectionTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       title,
-      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w800,
-          ),
+      style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
     );
   }
 }
 
-class _DropdownCard extends StatelessWidget {
+class _DropdownCard<T> extends StatelessWidget {
   const _DropdownCard({
     required this.icon,
     required this.title,
     required this.value,
     required this.items,
+    required this.labelBuilder,
     required this.onChanged,
   });
 
   final IconData icon;
   final String title;
-  final String value;
-  final List<String> items;
-  final ValueChanged<String?> onChanged;
+  final T value;
+  final List<T> items;
+  final String Function(T value) labelBuilder;
+  final ValueChanged<T?> onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -308,20 +222,17 @@ class _DropdownCard extends StatelessWidget {
           Icon(icon, color: colorScheme.primary),
           const SizedBox(width: 14),
           Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(fontWeight: FontWeight.w700),
-            ),
+            child: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
           ),
           DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
+            child: DropdownButton<T>(
               value: value,
               borderRadius: BorderRadius.circular(14),
               items: items
                   .map(
-                    (item) => DropdownMenuItem<String>(
+                    (item) => DropdownMenuItem<T>(
                       value: item,
-                      child: Text(item),
+                      child: Text(labelBuilder(item)),
                     ),
                   )
                   .toList(),
@@ -357,21 +268,14 @@ class _SwitchCard extends StatelessWidget {
         onChanged: onChanged,
         contentPadding: EdgeInsets.zero,
         secondary: Icon(icon, color: colorScheme.primary),
-        title: Text(
-          title,
-          style: const TextStyle(fontWeight: FontWeight.w700),
-        ),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
       ),
     );
   }
 }
 
 class _InfoCard extends StatelessWidget {
-  const _InfoCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-  });
+  const _InfoCard({required this.icon, required this.title, required this.subtitle});
 
   final IconData icon;
   final String title;
@@ -385,10 +289,7 @@ class _InfoCard extends StatelessWidget {
       child: ListTile(
         contentPadding: EdgeInsets.zero,
         leading: Icon(icon, color: colorScheme.primary),
-        title: Text(
-          title,
-          style: const TextStyle(fontWeight: FontWeight.w700),
-        ),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
         subtitle: Text(subtitle),
       ),
     );
@@ -409,9 +310,7 @@ class _CardContainer extends StatelessWidget {
       decoration: BoxDecoration(
         color: colorScheme.surface,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: colorScheme.outlineVariant.withValues(alpha: 0.45),
-        ),
+        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.45)),
         boxShadow: [
           BoxShadow(
             color: colorScheme.shadow.withValues(alpha: 0.04),
