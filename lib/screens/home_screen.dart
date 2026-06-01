@@ -373,7 +373,7 @@ class _ExpiringFoodTile extends StatelessWidget {
     final urgency = ExpiryHelper.urgencyFor(food.expiryDate);
     final urgencyColor = ExpiryHelper.colorFor(urgency);
     final urgencyBackground = ExpiryHelper.backgroundFor(urgency);
-    final expiryLabel = ExpiryHelper.labelFor(food.expiryDate);
+    final expiryLabel = '${food.amountLabel} • ${ExpiryHelper.labelFor(food.expiryDate)}';
 
     return Container(
       padding: const EdgeInsets.all(14),

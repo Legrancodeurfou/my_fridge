@@ -488,16 +488,14 @@ class _FoodCard extends StatelessWidget {
                               ),
                             ),
                           ),
-                          if (food.quantity > 1) ...[
-                            const SizedBox(width: 8),
-                            Text(
-                              'x${food.quantity}',
-                              style: theme.textTheme.titleSmall?.copyWith(
-                                fontWeight: FontWeight.w800,
-                                color: colorScheme.primary,
-                              ),
+                          const SizedBox(width: 8),
+                          Text(
+                            food.amountLabel,
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w800,
+                              color: colorScheme.primary,
                             ),
-                          ],
+                          ),
                         ],
                       ),
                       const SizedBox(height: 6),
@@ -730,7 +728,7 @@ class _FoodDetailSheet extends StatelessWidget {
               _DetailRow(
                 icon: Icons.inventory_2_outlined,
                 label: 'Quantité',
-                value: food.quantity.toString(),
+                value: food.amountLabel,
               ),
               const SizedBox(height: 12),
               _DetailRow(
@@ -848,7 +846,8 @@ class _FoodFormSheetState extends State<_FoodFormSheet> {
 
   late FoodCategory _category;
   late DateTime _expiryDate;
-  late int _quantity;
+  late double _amount;
+  late String _unit;
 
   bool get _isEditing => widget.foodToEdit != null;
 
@@ -858,7 +857,8 @@ class _FoodFormSheetState extends State<_FoodFormSheet> {
     final food = widget.foodToEdit;
     _nameController = TextEditingController(text: food?.name ?? '');
     _category = food?.category ?? FoodCategory.other;
-    _quantity = food?.quantity ?? 1;
+    _amount = food?.amount ?? 1;
+    _unit = food?.unit ?? 'unité';
     _expiryDate = food?.expiryDate ??
         DateTime(
           DateTime.now().year,
@@ -867,13 +867,14 @@ class _FoodFormSheetState extends State<_FoodFormSheet> {
         ).add(const Duration(days: 7));
   }
 
-  void _incrementQuantity() {
-    setState(() => _quantity++);
+  void _incrementAmount() {
+    setState(() => _amount += MeasurementHelper.stepFor(_unit));
   }
 
-  void _decrementQuantity() {
-    if (_quantity <= 1) return;
-    setState(() => _quantity--);
+  void _decrementAmount() {
+    final nextAmount = _amount - MeasurementHelper.stepFor(_unit);
+    if (nextAmount <= 0) return;
+    setState(() => _amount = nextAmount);
   }
 
   @override
@@ -910,7 +911,9 @@ class _FoodFormSheetState extends State<_FoodFormSheet> {
       emoji: FoodCategoryHelper.emoji(_category),
       expiryDate: _expiryDate,
       category: _category,
-      quantity: _quantity,
+      quantity: MeasurementHelper.logicalQuantity(_amount, _unit),
+      amount: _amount,
+      unit: _unit,
     );
 
     widget.onSave(food);
@@ -1036,20 +1039,52 @@ class _FoodFormSheetState extends State<_FoodFormSheet> {
                     label: 'Quantité',
                     prefixIcon: Icons.inventory_2_outlined,
                   ),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Expanded(
-                        child: Text(
-                          'Quantité : $_quantity',
-                          style: theme.textTheme.bodyLarge?.copyWith(
-                            fontWeight: FontWeight.w600,
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              MeasurementHelper.label(_amount, _unit),
+                              style: theme.textTheme.bodyLarge?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                           ),
-                        ),
+                          _FridgeQuantityStepper(
+                            amountLabel: MeasurementHelper.label(_amount, _unit),
+                            canDecrement:
+                                _amount > MeasurementHelper.stepFor(_unit),
+                            onDecrement: _decrementAmount,
+                            onIncrement: _incrementAmount,
+                          ),
+                        ],
                       ),
-                      _FridgeQuantityStepper(
-                        quantity: _quantity,
-                        onDecrement: _decrementQuantity,
-                        onIncrement: _incrementQuantity,
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: _unit,
+                        decoration: const InputDecoration(
+                          labelText: 'Unité',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: MeasurementHelper.units
+                            .map(
+                              (unit) => DropdownMenuItem<String>(
+                                value: unit,
+                                child: Text(unit),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) {
+                          if (value == null) return;
+                          setState(() {
+                            _unit = value;
+                            if (_amount < MeasurementHelper.stepFor(_unit)) {
+                              _amount = MeasurementHelper.stepFor(_unit);
+                            }
+                          });
+                        },
                       ),
                     ],
                   ),
@@ -1195,12 +1230,14 @@ class _NoSearchResultsView extends StatelessWidget {
 
 class _FridgeQuantityStepper extends StatelessWidget {
   const _FridgeQuantityStepper({
-    required this.quantity,
+    required this.amountLabel,
+    required this.canDecrement,
     required this.onDecrement,
     required this.onIncrement,
   });
 
-  final int quantity;
+  final String amountLabel;
+  final bool canDecrement;
   final VoidCallback onDecrement;
   final VoidCallback onIncrement;
 
@@ -1208,7 +1245,6 @@ class _FridgeQuantityStepper extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final canDecrement = quantity > 1;
 
     return Container(
       decoration: BoxDecoration(
@@ -1229,9 +1265,9 @@ class _FridgeQuantityStepper extends StatelessWidget {
             iconSize: 20,
           ),
           SizedBox(
-            width: 28,
+            width: 72,
             child: Text(
-              '$quantity',
+              amountLabel,
               textAlign: TextAlign.center,
               style: theme.textTheme.titleSmall?.copyWith(
                 fontWeight: FontWeight.w800,
@@ -1250,3 +1286,4 @@ class _FridgeQuantityStepper extends StatelessWidget {
     );
   }
 }
+

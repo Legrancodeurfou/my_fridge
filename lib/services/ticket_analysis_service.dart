@@ -35,13 +35,17 @@ class TicketAnalysisService {
       {
         'name': 'Pâtes',
         'quantity': 1,
+        'amount': 500,
+        'unit': 'g',
         'category': 'other',
         'estimatedExpirationDate':
             today.add(const Duration(days: 365)).toIso8601String(),
       },
       {
         'name': 'Jambon',
-        'quantity': 1,
+        'quantity': 2,
+        'amount': 2,
+        'unit': 'tranche',
         'category': 'meat',
         'estimatedExpirationDate':
             today.add(const Duration(days: 5)).toIso8601String(),
@@ -49,6 +53,8 @@ class TicketAnalysisService {
       {
         'name': 'Crème fraîche',
         'quantity': 1,
+        'amount': 20,
+        'unit': 'cl',
         'category': 'dairy',
         'estimatedExpirationDate':
             today.add(const Duration(days: 10)).toIso8601String(),
@@ -56,6 +62,8 @@ class TicketAnalysisService {
       {
         'name': 'Salade',
         'quantity': 1,
+        'amount': 1,
+        'unit': 'unité',
         'category': 'produce',
         'estimatedExpirationDate':
             today.add(const Duration(days: 3)).toIso8601String(),

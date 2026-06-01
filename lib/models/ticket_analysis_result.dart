@@ -6,12 +6,21 @@ class TicketRawProduct {
   const TicketRawProduct({
     required this.name,
     required this.quantity,
+    required this.amount,
+    required this.unit,
     required this.category,
     required this.estimatedExpirationDate,
   });
 
   final String name;
+
+  /// Nombre d'unités logiques.
   final int quantity;
+
+  /// Quantité affichable : 500 g, 20 cl, 2 tranches...
+  final double amount;
+  final String unit;
+
   final FoodCategory category;
   final DateTime estimatedExpirationDate;
 
@@ -23,12 +32,21 @@ class TicketRawProduct {
       _ => 1,
     };
 
-    final categoryKey = json['category'] as String? ?? 'other';
-    final category = FoodCategory.values.asNameMap()[categoryKey] ??
-        FoodCategory.other;
+    final rawAmount = json['amount'];
+    final amount = switch (rawAmount) {
+      final int value => value.toDouble(),
+      final double value => value,
+      final num value => value.toDouble(),
+      _ => (quantity < 1 ? 1 : quantity).toDouble(),
+    };
 
-    final dateValue =
-        json['estimatedExpirationDate'] ?? json['expiryDate'];
+    final unit = json['unit'] as String? ?? 'unité';
+
+    final categoryKey = json['category'] as String? ?? 'other';
+    final category =
+        FoodCategory.values.asNameMap()[categoryKey] ?? FoodCategory.other;
+
+    final dateValue = json['estimatedExpirationDate'] ?? json['expiryDate'];
     final parsedDate = switch (dateValue) {
       final String value => DateTime.parse(value),
       final DateTime value => value,
@@ -37,7 +55,11 @@ class TicketRawProduct {
 
     return TicketRawProduct(
       name: json['name'] as String,
-      quantity: quantity < 1 ? 1 : quantity,
+      quantity: quantity < 1
+          ? MeasurementHelper.logicalQuantity(amount, unit)
+          : quantity,
+      amount: amount <= 0 ? 1 : amount,
+      unit: unit,
       category: category,
       estimatedExpirationDate: _dateOnly(parsedDate),
     );
@@ -48,6 +70,8 @@ class TicketRawProduct {
       id: id,
       name: name,
       quantity: quantity,
+      amount: amount,
+      unit: unit,
       category: category,
       estimatedExpirationDate: estimatedExpirationDate,
     );

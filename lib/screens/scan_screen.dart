@@ -403,7 +403,9 @@ class _ScanValidationSheetState extends State<_ScanValidationSheet> {
     setState(() {
       _items = _items.map((draft) {
         if (draft.id != id) return draft;
-        return draft.copyWith(quantity: draft.quantity + 1);
+        final step = MeasurementHelper.stepFor(draft.unit);
+        final nextAmount = draft.amount + step;
+        return draft.copyWith(amount: nextAmount);
       }).toList();
     });
   }
@@ -411,8 +413,11 @@ class _ScanValidationSheetState extends State<_ScanValidationSheet> {
   void _decrementQuantity(String id) {
     setState(() {
       _items = _items.map((draft) {
-        if (draft.id != id || draft.quantity <= 1) return draft;
-        return draft.copyWith(quantity: draft.quantity - 1);
+        if (draft.id != id) return draft;
+        final step = MeasurementHelper.stepFor(draft.unit);
+        final nextAmount = draft.amount - step;
+        if (nextAmount <= 0) return draft;
+        return draft.copyWith(amount: nextAmount);
       }).toList();
     });
   }
@@ -421,8 +426,7 @@ class _ScanValidationSheetState extends State<_ScanValidationSheet> {
     return _items.map((draft) => draft.toFoodItem()).toList();
   }
 
-  int get _totalUnits =>
-      _items.fold<int>(0, (sum, draft) => sum + draft.quantity);
+  int get _totalLines => _items.length;
 
   @override
   Widget build(BuildContext context) {
@@ -500,7 +504,7 @@ class _ScanValidationSheetState extends State<_ScanValidationSheet> {
                     _items.isEmpty
                         ? 'Aucun produit sélectionné'
                         : '${_items.length} produit${_items.length > 1 ? 's' : ''} · '
-                            '$_totalUnits unité${_totalUnits > 1 ? 's' : ''}',
+                            '$_totalLines ligne${_totalLines > 1 ? 's' : ''}',
                     style: theme.textTheme.labelLarge?.copyWith(
                       color: colorScheme.primary,
                       fontWeight: FontWeight.w600,
@@ -637,7 +641,8 @@ class _DetectedProductTile extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               _QuantityStepper(
-                quantity: draft.quantity,
+                amountLabel: draft.amountLabel,
+                canDecrement: draft.amount > MeasurementHelper.stepFor(draft.unit),
                 onDecrement: onDecrement,
                 onIncrement: onIncrement,
               ),
@@ -688,12 +693,14 @@ class _DetectedProductTile extends StatelessWidget {
 
 class _QuantityStepper extends StatelessWidget {
   const _QuantityStepper({
-    required this.quantity,
+    required this.amountLabel,
+    required this.canDecrement,
     required this.onDecrement,
     required this.onIncrement,
   });
 
-  final int quantity;
+  final String amountLabel;
+  final bool canDecrement;
   final VoidCallback onDecrement;
   final VoidCallback onIncrement;
 
@@ -701,7 +708,6 @@ class _QuantityStepper extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final canDecrement = quantity > 1;
 
     return Container(
       decoration: BoxDecoration(
@@ -722,9 +728,9 @@ class _QuantityStepper extends StatelessWidget {
             iconSize: 20,
           ),
           SizedBox(
-            width: 28,
+            width: 72,
             child: Text(
-              '$quantity',
+              amountLabel,
               textAlign: TextAlign.center,
               style: theme.textTheme.titleSmall?.copyWith(
                 fontWeight: FontWeight.w800,

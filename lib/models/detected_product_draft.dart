@@ -8,15 +8,27 @@ class DetectedProductDraft {
     required this.category,
     required this.estimatedExpirationDate,
     this.quantity = 1,
-  }) : assert(quantity >= 1);
+    this.amount = 1,
+    this.unit = 'unité',
+  })  : assert(quantity >= 1),
+        assert(amount > 0);
 
   final String id;
   final String name;
   final FoodCategory category;
   final DateTime estimatedExpirationDate;
+
+  /// Nombre d'unités logiques.
+  /// Exemple : 4 yaourts => quantity = 4.
+  /// Exemple : 500 g de pâtes => quantity = 1.
   final int quantity;
 
+  /// Quantité lisible pour l'utilisateur : 500 g, 20 cl, 2 tranches...
+  final double amount;
+  final String unit;
+
   String get emoji => FoodCategoryHelper.emoji(category);
+  String get amountLabel => MeasurementHelper.label(amount, unit);
 
   DetectedProductDraft copyWith({
     String? id,
@@ -24,14 +36,21 @@ class DetectedProductDraft {
     FoodCategory? category,
     DateTime? estimatedExpirationDate,
     int? quantity,
+    double? amount,
+    String? unit,
   }) {
+    final nextAmount = amount ?? this.amount;
+    final nextUnit = unit ?? this.unit;
+
     return DetectedProductDraft(
       id: id ?? this.id,
       name: name ?? this.name,
       category: category ?? this.category,
       estimatedExpirationDate:
           estimatedExpirationDate ?? this.estimatedExpirationDate,
-      quantity: quantity ?? this.quantity,
+      quantity: quantity ?? MeasurementHelper.logicalQuantity(nextAmount, nextUnit),
+      amount: nextAmount,
+      unit: nextUnit,
     );
   }
 
@@ -43,6 +62,8 @@ class DetectedProductDraft {
       expiryDate: estimatedExpirationDate,
       category: category,
       quantity: quantity,
+      amount: amount,
+      unit: unit,
     );
   }
 }

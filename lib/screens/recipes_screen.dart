@@ -119,6 +119,7 @@ class RecipeIngredientMatch {
     this.matchedFoodName,
     this.matchedFoodId,
     this.matchedFoodQuantity,
+    this.matchedFoodAmountLabel,
   });
 
   final RecipeIngredient ingredient;
@@ -126,12 +127,14 @@ class RecipeIngredientMatch {
   final String? matchedFoodName;
   final String? matchedFoodId;
   final int? matchedFoodQuantity;
+  final String? matchedFoodAmountLabel;
 
-  /// Libellé affiché pour un ingrédient présent dans le frigo (ex. « Pâtes x3 »).
+  /// Libellé affiché pour un ingrédient présent dans le frigo (ex. « Pâtes 500 g »).
   String get fridgeDisplayLabel {
     if (matchedFoodName == null) return ingredient.label;
-    final quantity = matchedFoodQuantity ?? 1;
-    return '$matchedFoodName x$quantity';
+    return matchedFoodAmountLabel == null
+        ? matchedFoodName!
+        : '$matchedFoodName $matchedFoodAmountLabel';
   }
 
   String get chipLabel =>
@@ -364,6 +367,7 @@ abstract final class RecipeCatalog {
             matchedFoodName: food.name,
             matchedFoodId: food.id,
             matchedFoodQuantity: food.quantity,
+            matchedFoodAmountLabel: food.amountLabel,
           );
         }
       }

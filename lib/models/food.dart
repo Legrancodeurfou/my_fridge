@@ -10,14 +10,27 @@ class FoodItem {
     required this.expiryDate,
     this.category = FoodCategory.other,
     this.quantity = 1,
-  }) : assert(quantity >= 1);
+    this.amount = 1,
+    this.unit = 'unité',
+  })  : assert(quantity >= 1),
+        assert(amount > 0);
 
   final String id;
   final String name;
   final String emoji;
   final DateTime expiryDate;
   final FoodCategory category;
+
+  /// Nombre d'unités logiques pour les stats et la consommation.
+  /// Exemple : 4 yaourts => quantity = 4.
+  /// Exemple : 500 g de pâtes => quantity = 1.
   final int quantity;
+
+  /// Quantité lisible pour cuisiner : 500 g, 20 cl, 2 tranches, etc.
+  final double amount;
+  final String unit;
+
+  String get amountLabel => MeasurementHelper.label(amount, unit);
 
   FoodItem copyWith({
     String? id,
@@ -26,6 +39,8 @@ class FoodItem {
     DateTime? expiryDate,
     FoodCategory? category,
     int? quantity,
+    double? amount,
+    String? unit,
   }) {
     return FoodItem(
       id: id ?? this.id,
@@ -34,6 +49,8 @@ class FoodItem {
       expiryDate: expiryDate ?? this.expiryDate,
       category: category ?? this.category,
       quantity: quantity ?? this.quantity,
+      amount: amount ?? this.amount,
+      unit: unit ?? this.unit,
     );
   }
 
@@ -45,6 +62,8 @@ class FoodItem {
       'expiryDate': expiryDate.toIso8601String(),
       'category': category.name,
       'quantity': quantity,
+      'amount': amount,
+      'unit': unit,
     };
   }
 
@@ -56,6 +75,14 @@ class FoodItem {
       _ => 1,
     };
 
+    final rawAmount = json['amount'];
+    final amount = switch (rawAmount) {
+      final int value => value.toDouble(),
+      final double value => value,
+      final num value => value.toDouble(),
+      _ => (quantity < 1 ? 1 : quantity).toDouble(),
+    };
+
     return FoodItem(
       id: json['id'] as String,
       name: json['name'] as String,
@@ -63,7 +90,55 @@ class FoodItem {
       expiryDate: DateTime.parse(json['expiryDate'] as String),
       category: FoodCategory.values.byName(json['category'] as String),
       quantity: quantity < 1 ? 1 : quantity,
+      amount: amount <= 0 ? 1 : amount,
+      unit: json['unit'] as String? ?? 'unité',
     );
+  }
+}
+
+abstract final class MeasurementHelper {
+  static const units = ['g', 'kg', 'ml', 'cl', 'l', 'unité', 'tranche'];
+
+  static String label(double amount, String unit) {
+    final formattedAmount = inputValue(amount);
+    final displayUnit = _pluralize(unit, amount);
+    return '$formattedAmount $displayUnit';
+  }
+
+  static String inputValue(double amount) {
+    if (amount == amount.roundToDouble()) {
+      return amount.round().toString();
+    }
+    return amount.toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '');
+  }
+
+  static double stepFor(String unit) {
+    return switch (unit) {
+      'g' => 50,
+      'kg' => 0.1,
+      'ml' => 50,
+      'cl' => 5,
+      'l' => 0.5,
+      'tranche' => 1,
+      'unité' => 1,
+      _ => 1,
+    };
+  }
+
+  static int logicalQuantity(double amount, String unit) {
+    if (unit == 'unité' || unit == 'tranche') {
+      return amount.round().clamp(1, 9999);
+    }
+    return 1;
+  }
+
+  static String _pluralize(String unit, double amount) {
+    if (amount <= 1) return unit;
+    return switch (unit) {
+      'unité' => 'unités',
+      'tranche' => 'tranches',
+      _ => unit,
+    };
   }
 }
 
@@ -99,6 +174,8 @@ abstract final class FridgeMockDataSource {
         id: '1',
         name: 'Lait',
         emoji: '🥛',
+        amount: 1,
+        unit: 'l',
         expiryDate: today.add(const Duration(days: 3)),
         category: FoodCategory.dairy,
       ),
@@ -106,6 +183,9 @@ abstract final class FridgeMockDataSource {
         id: '2',
         name: 'Tomates',
         emoji: '🍅',
+        amount: 4,
+        unit: 'unité',
+        quantity: 4,
         expiryDate: today.add(const Duration(days: 1)),
         category: FoodCategory.produce,
       ),
@@ -113,6 +193,8 @@ abstract final class FridgeMockDataSource {
         id: '3',
         name: 'Emmental',
         emoji: '🧀',
+        amount: 200,
+        unit: 'g',
         expiryDate: today.add(const Duration(days: 12)),
         category: FoodCategory.dairy,
       ),
@@ -120,6 +202,9 @@ abstract final class FridgeMockDataSource {
         id: '4',
         name: 'Steak haché',
         emoji: '🥩',
+        amount: 2,
+        unit: 'unité',
+        quantity: 2,
         expiryDate: today,
         category: FoodCategory.meat,
       ),
@@ -127,6 +212,9 @@ abstract final class FridgeMockDataSource {
         id: '5',
         name: 'Œufs',
         emoji: '🥚',
+        amount: 6,
+        unit: 'unité',
+        quantity: 6,
         expiryDate: today.add(const Duration(days: 6)),
         category: FoodCategory.dairy,
       ),
@@ -134,6 +222,9 @@ abstract final class FridgeMockDataSource {
         id: '6',
         name: 'Yaourt nature',
         emoji: '🥣',
+        amount: 4,
+        unit: 'unité',
+        quantity: 4,
         expiryDate: today.subtract(const Duration(days: 2)),
         category: FoodCategory.dairy,
       ),
