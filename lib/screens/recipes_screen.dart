@@ -205,12 +205,10 @@ abstract final class RecipeCatalog {
     final recipes = <RecipeSuggestion>[];
 
     void addIf(bool condition, RecipeSuggestion recipe) {
-      if (condition &&
-          recipes.length < 3 &&
-          !recipes.any((item) => item.name == recipe.name)) {
-        recipes.add(recipe);
-      }
-    }
+      if (condition && !recipes.any((item) => item.name == recipe.name)) {
+     recipes.add(recipe);
+   }
+}
 
     addIf(
       _hasAny(names, ['pâte', 'pate', 'pâtes', 'pates']),
@@ -476,7 +474,7 @@ abstract final class RecipeCatalog {
     final filtered = _filterForProfile(recipes, profile);
     final sorted = _sortForProfile(filtered, profile, foods);
 
-    return sorted.take(3).toList();
+    return sorted.take(5).toList();
   }
 
   static List<RecipeIngredientMatch> matchIngredients(
@@ -489,8 +487,9 @@ abstract final class RecipeCatalog {
       for (final food in foods) {
         final name = food.name.toLowerCase();
         if (ingredient.keywords.any((keyword) => name.contains(keyword))) {
-          final hasEnough = food.unit == ingredient.requiredUnit &&
-              food.amount >= ingredient.requiredAmount;
+          final hasEnough =
+            _normalizeUnit(food.unit) == _normalizeUnit(ingredient.requiredUnit) &&
+            food.amount >= ingredient.requiredAmount;
 
           return RecipeIngredientMatch(
             ingredient: ingredient,
@@ -608,6 +607,14 @@ abstract final class RecipeCatalog {
 
     return score;
   }
+
+  static String _normalizeUnit(String unit) {
+  return unit
+      .trim()
+      .toLowerCase()
+      .replaceAll('unités', 'unité')
+      .replaceAll('tranches', 'tranche');
+}
 
   static bool _hasAny(List<String> foodNames, List<String> keywords) {
     return keywords.any(
