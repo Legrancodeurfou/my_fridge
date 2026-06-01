@@ -85,10 +85,16 @@ class RecipeIngredient {
   const RecipeIngredient({
     required this.label,
     required this.keywords,
+    required this.requiredAmount,
+    required this.requiredUnit,
   });
 
   final String label;
   final List<String> keywords;
+  final int requiredAmount;
+  final String requiredUnit;
+
+  String get requiredAmountLabel => '$requiredAmount $requiredUnit';
 }
 
 class RecipeSuggestion {
@@ -118,7 +124,8 @@ class RecipeIngredientMatch {
     required this.isAvailable,
     this.matchedFoodName,
     this.matchedFoodId,
-    this.matchedFoodQuantity,
+    this.matchedFoodAmount,
+    this.matchedFoodUnit,
     this.matchedFoodAmountLabel,
   });
 
@@ -126,19 +133,34 @@ class RecipeIngredientMatch {
   final bool isAvailable;
   final String? matchedFoodName;
   final String? matchedFoodId;
-  final int? matchedFoodQuantity;
+  final int? matchedFoodAmount;
+  final String? matchedFoodUnit;
   final String? matchedFoodAmountLabel;
 
-  /// Libellé affiché pour un ingrédient présent dans le frigo (ex. « Pâtes 500 g »).
-  String get fridgeDisplayLabel {
-    if (matchedFoodName == null) return ingredient.label;
-    return matchedFoodAmountLabel == null
-        ? matchedFoodName!
-        : '$matchedFoodName $matchedFoodAmountLabel';
+  bool get hasFoodInFridge => matchedFoodId != null;
+
+  int get missingAmount {
+    final amount = matchedFoodAmount ?? 0;
+    final missing = ingredient.requiredAmount - amount;
+    return missing < 0 ? 0 : missing;
   }
 
-  String get chipLabel =>
-      isAvailable && matchedFoodId != null ? fridgeDisplayLabel : ingredient.label;
+  String get requiredDisplayLabel =>
+      '${ingredient.label} ${ingredient.requiredAmountLabel}';
+
+  /// Exemple : « Pâtes 500/500 g » ou « Jambon 1/2 tranches ».
+  String get fridgeDisplayLabel {
+    if (matchedFoodName == null) return requiredDisplayLabel;
+
+    if (matchedFoodUnit == ingredient.requiredUnit && matchedFoodAmount != null) {
+      return '$matchedFoodName $matchedFoodAmount/${ingredient.requiredAmount} ${ingredient.requiredUnit}';
+    }
+
+    final current = matchedFoodAmountLabel ?? 'quantité inconnue';
+    return '$matchedFoodName $current / ${ingredient.requiredAmountLabel}';
+  }
+
+  String get chipLabel => hasFoodInFridge ? fridgeDisplayLabel : requiredDisplayLabel;
 }
 
 abstract final class RecipeCatalog {
@@ -168,14 +190,20 @@ abstract final class RecipeCatalog {
           RecipeIngredient(
             label: 'Pâtes',
             keywords: ['pâte', 'pate', 'pâtes', 'pates'],
+            requiredAmount: 500,
+            requiredUnit: 'g',
           ),
           RecipeIngredient(
             label: 'Crème fraîche',
             keywords: ['crème', 'creme'],
+            requiredAmount: 20,
+            requiredUnit: 'cl',
           ),
           RecipeIngredient(
             label: 'Emmental',
             keywords: ['emmental', 'fromage'],
+            requiredAmount: 100,
+            requiredUnit: 'g',
           ),
         ],
         steps: [
@@ -197,12 +225,24 @@ abstract final class RecipeCatalog {
         description:
             'Un classique rapide pour utiliser ton jambon avant la date limite.',
         requiredIngredients: [
-          RecipeIngredient(label: 'Jambon', keywords: ['jambon']),
+          RecipeIngredient(
+            label: 'Jambon',
+            keywords: ['jambon'],
+            requiredAmount: 2,
+            requiredUnit: 'tranches',
+          ),
           RecipeIngredient(
             label: 'Emmental',
             keywords: ['emmental', 'fromage'],
+            requiredAmount: 100,
+            requiredUnit: 'g',
           ),
-          RecipeIngredient(label: 'Pain', keywords: ['pain']),
+          RecipeIngredient(
+            label: 'Pain',
+            keywords: ['pain'],
+            requiredAmount: 2,
+            requiredUnit: 'tranches',
+          ),
         ],
         steps: [
           'Tartine deux tranches de pain avec un peu de crème ou de beurre.',
@@ -222,9 +262,24 @@ abstract final class RecipeCatalog {
         description:
             'Une salade légère et croquante avec les produits frais disponibles.',
         requiredIngredients: [
-          RecipeIngredient(label: 'Salade', keywords: ['salade']),
-          RecipeIngredient(label: 'Tomates', keywords: ['tomate']),
-          RecipeIngredient(label: 'Œufs', keywords: ['œuf', 'oeuf']),
+          RecipeIngredient(
+            label: 'Salade',
+            keywords: ['salade'],
+            requiredAmount: 1,
+            requiredUnit: 'unité',
+          ),
+          RecipeIngredient(
+            label: 'Tomates',
+            keywords: ['tomate'],
+            requiredAmount: 2,
+            requiredUnit: 'unités',
+          ),
+          RecipeIngredient(
+            label: 'Œufs',
+            keywords: ['œuf', 'oeuf'],
+            requiredAmount: 2,
+            requiredUnit: 'unités',
+          ),
         ],
         steps: [
           'Lave et essore la salade, puis place-la dans un saladier.',
@@ -244,14 +299,23 @@ abstract final class RecipeCatalog {
         description:
             'Parfaite pour un repas express avec tes produits laitiers.',
         requiredIngredients: [
-          RecipeIngredient(label: 'Œufs', keywords: ['œuf', 'oeuf']),
+          RecipeIngredient(
+            label: 'Œufs',
+            keywords: ['œuf', 'oeuf'],
+            requiredAmount: 2,
+            requiredUnit: 'unités',
+          ),
           RecipeIngredient(
             label: 'Emmental',
             keywords: ['emmental', 'fromage'],
+            requiredAmount: 100,
+            requiredUnit: 'g',
           ),
           RecipeIngredient(
             label: 'Crème fraîche',
             keywords: ['crème', 'creme'],
+            requiredAmount: 20,
+            requiredUnit: 'cl',
           ),
         ],
         steps: [
@@ -275,11 +339,20 @@ abstract final class RecipeCatalog {
           RecipeIngredient(
             label: 'Pâtes',
             keywords: ['pâte', 'pate', 'pâtes', 'pates'],
+            requiredAmount: 500,
+            requiredUnit: 'g',
           ),
-          RecipeIngredient(label: 'Tomates', keywords: ['tomate']),
+          RecipeIngredient(
+            label: 'Tomates',
+            keywords: ['tomate'],
+            requiredAmount: 2,
+            requiredUnit: 'unités',
+          ),
           RecipeIngredient(
             label: 'Emmental',
             keywords: ['emmental', 'fromage'],
+            requiredAmount: 100,
+            requiredUnit: 'g',
           ),
         ],
         steps: [
@@ -302,14 +375,20 @@ abstract final class RecipeCatalog {
           RecipeIngredient(
             label: 'Pommes de terre',
             keywords: ['pomme de terre', 'pommes de terre'],
+            requiredAmount: 500,
+            requiredUnit: 'g',
           ),
           RecipeIngredient(
             label: 'Crème fraîche',
             keywords: ['crème', 'creme'],
+            requiredAmount: 20,
+            requiredUnit: 'cl',
           ),
           RecipeIngredient(
             label: 'Emmental',
             keywords: ['emmental', 'fromage'],
+            requiredAmount: 100,
+            requiredUnit: 'g',
           ),
         ],
         steps: [
@@ -332,11 +411,20 @@ abstract final class RecipeCatalog {
           RecipeIngredient(
             label: 'Steak haché',
             keywords: ['steak', 'haché', 'hache', 'viande'],
+            requiredAmount: 250,
+            requiredUnit: 'g',
           ),
-          RecipeIngredient(label: 'Tomates', keywords: ['tomate']),
+          RecipeIngredient(
+            label: 'Tomates',
+            keywords: ['tomate'],
+            requiredAmount: 2,
+            requiredUnit: 'unités',
+          ),
           RecipeIngredient(
             label: 'Pâtes',
             keywords: ['pâte', 'pate', 'pâtes', 'pates'],
+            requiredAmount: 500,
+            requiredUnit: 'g',
           ),
         ],
         steps: [
@@ -361,24 +449,24 @@ abstract final class RecipeCatalog {
       for (final food in foods) {
         final name = food.name.toLowerCase();
         if (ingredient.keywords.any((keyword) => name.contains(keyword))) {
+          final hasEnough = food.unit == ingredient.requiredUnit &&
+              food.amount >= ingredient.requiredAmount;
+
           return RecipeIngredientMatch(
             ingredient: ingredient,
-            isAvailable: true,
+            isAvailable: hasEnough,
             matchedFoodName: food.name,
             matchedFoodId: food.id,
-            matchedFoodQuantity: food.quantity,
+            matchedFoodAmount: food.amount,
+            matchedFoodUnit: food.unit,
             matchedFoodAmountLabel: food.amountLabel,
           );
         }
       }
 
-      final hasMatch = ingredient.keywords.any(
-        (keyword) => foodNames.any((name) => name.contains(keyword)),
-      );
-
       return RecipeIngredientMatch(
         ingredient: ingredient,
-        isAvailable: hasMatch,
+        isAvailable: false,
       );
     }).toList();
   }
@@ -392,6 +480,20 @@ abstract final class RecipeCatalog {
         .map((match) => match.matchedFoodId!)
         .toSet()
         .toList();
+  }
+
+  static Map<String, int> consumptionAmounts(
+    RecipeSuggestion recipe,
+    List<FoodItem> foods,
+  ) {
+    final result = <String, int>{};
+
+    for (final match in matchIngredients(recipe, foods)) {
+      if (!match.isAvailable || match.matchedFoodId == null) continue;
+      result[match.matchedFoodId!] = match.ingredient.requiredAmount;
+    }
+
+    return result;
   }
 
   static bool _hasAny(List<String> foodNames, List<String> keywords) {
@@ -635,7 +737,7 @@ class _RecipeDetailSheet extends StatelessWidget {
     final availableMatches = RecipeCatalog.matchIngredients(recipe, foods)
         .where((match) => match.isAvailable)
         .toList();
-    final foodIdsToRemove = RecipeCatalog.matchedFoodIds(recipe, foods);
+    final consumptionAmounts = RecipeCatalog.consumptionAmounts(recipe, foods);
 
     final choice = await showDialog<_CookedChoice>(
       context: sheetContext,
@@ -677,7 +779,7 @@ class _RecipeDetailSheet extends StatelessWidget {
               child: const Text('Non, garder les aliments'),
             ),
             FilledButton(
-              onPressed: foodIdsToRemove.isEmpty
+              onPressed: consumptionAmounts.isEmpty
                   ? null
                   : () => Navigator.pop(dialogContext, _CookedChoice.remove),
               child: const Text('Oui, retirer du frigo'),
@@ -690,7 +792,7 @@ class _RecipeDetailSheet extends StatelessWidget {
     if (choice == null || choice == _CookedChoice.cancel) return;
 
     if (choice == _CookedChoice.remove) {
-      store.consumeFoodsByIds(foodIdsToRemove);
+      store.consumeFoodQuantities(consumptionAmounts);
     }
 
     if (sheetContext.mounted) Navigator.pop(sheetContext);
@@ -698,9 +800,7 @@ class _RecipeDetailSheet extends StatelessWidget {
     if (!sheetContext.mounted) return;
 
     final message = choice == _CookedChoice.remove
-        ? foodIdsToRemove.length == 1
-            ? 'Bon appétit ! 1 unité retirée du frigo.'
-            : 'Bon appétit ! ${foodIdsToRemove.length} unités retirées du frigo.'
+        ? 'Bon appétit ! Les quantités utilisées ont été retirées du frigo.'
         : 'Bon appétit ! « ${recipe.name} » est noté.';
 
     ScaffoldMessenger.of(sheetContext).showSnackBar(
@@ -859,7 +959,7 @@ class _RecipeDetailSheet extends StatelessWidget {
                         children: missing
                             .map(
                               (match) => _IngredientChip(
-                                label: match.ingredient.label,
+                                label: match.chipLabel,
                                 isAvailable: false,
                               ),
                             )

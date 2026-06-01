@@ -105,6 +105,36 @@ class FridgeStore extends ChangeNotifier {
     _save();
   }
 
+void consumeFoodAmounts(Map<String, double> amountsByFoodId) {
+  if (amountsByFoodId.isEmpty) return;
+
+  final updated = <FoodItem>[];
+
+  for (final food in _foods) {
+    final amountToConsume = amountsByFoodId[food.id];
+
+    if (amountToConsume == null || amountToConsume <= 0) {
+      updated.add(food);
+      continue;
+    }
+
+    final newAmount = food.amount - amountToConsume;
+
+    if (newAmount > 0) {
+      updated.add(
+        food.copyWith(
+          amount: newAmount,
+          quantity: MeasurementHelper.logicalQuantity(newAmount, food.unit),
+        ),
+      );
+    }
+  }
+
+  _foods = updated;
+  notifyListeners();
+  _save();
+}
+
   Future<void> _save() async {
     final prefs = await SharedPreferences.getInstance();
     final encoded = jsonEncode(_foods.map((food) => food.toJson()).toList());
@@ -126,10 +156,14 @@ class FridgeStore extends ChangeNotifier {
     final updatedFoods = [...currentFoods];
     final existingFood = updatedFoods[index];
 
-    updatedFoods[index] = existingFood.copyWith(
-      amount: existingFood.amount + newFood.amount,
-      expiryDate: _earliestDate(existingFood.expiryDate, newFood.expiryDate),
-    );
+    final newAmount = existingFood.amount + newFood.amount;
+
+updatedFoods[index] = existingFood.copyWith(
+  amount: newAmount,
+  quantity: MeasurementHelper.logicalQuantity(newAmount, existingFood.unit),
+  expiryDate: _earliestDate(existingFood.expiryDate, newFood.expiryDate),
+);
+
 
     return updatedFoods;
   }
