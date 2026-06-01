@@ -5,8 +5,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/food.dart';
 
-/// Source de vérité partagée pour la liste d’aliments du frigo.
-/// Utilisée par FridgeScreen et ScanScreen.
 class FridgeStore extends ChangeNotifier {
   FridgeStore._(this._foods);
 
@@ -16,7 +14,6 @@ class FridgeStore extends ChangeNotifier {
 
   List<FoodItem> get foods => List.unmodifiable(_foods);
 
-  /// Charge les aliments sauvegardés, ou les données mockées au premier lancement.
   static Future<FridgeStore> load() async {
     final prefs = await SharedPreferences.getInstance();
     final savedJson = prefs.getString(_storageKey);
@@ -30,21 +27,28 @@ class FridgeStore extends ChangeNotifier {
       final foods = decoded
           .map((item) => FoodItem.fromJson(item as Map<String, dynamic>))
           .toList();
-      return FridgeStore._(foods);
+
+      return FridgeStore._(_mergeDuplicates(foods));
     } catch (_) {
       return FridgeStore._(FridgeMockDataSource.fetchAll());
     }
   }
 
   void addFood(FoodItem food) {
-    _foods = [food, ..._foods];
+    _foods = _addOrMergeFood(_foods, food);
     notifyListeners();
     _save();
   }
 
   void addFoods(List<FoodItem> foods) {
     if (foods.isEmpty) return;
-    _foods = [...foods, ..._foods];
+
+    var updatedFoods = _foods;
+    for (final food in foods) {
+      updatedFoods = _addOrMergeFood(updatedFoods, food);
+    }
+
+    _foods = updatedFoods;
     notifyListeners();
     _save();
   }
@@ -55,6 +59,8 @@ class FridgeStore extends ChangeNotifier {
 
     _foods = [..._foods];
     _foods[index] = updatedFood;
+    _foods = _mergeDuplicates(_foods);
+
     notifyListeners();
     _save();
   }
@@ -70,11 +76,11 @@ class FridgeStore extends ChangeNotifier {
 
     final idsToRemove = foodIds.toSet();
     _foods = _foods.where((food) => !idsToRemove.contains(food.id)).toList();
+
     notifyListeners();
     _save();
   }
 
-  /// Consomme une unité par aliment : quantity - 1, ou suppression si quantity == 1.
   void consumeFoodsByIds(List<String> foodIds) {
     if (foodIds.isEmpty) return;
 
@@ -87,8 +93,10 @@ class FridgeStore extends ChangeNotifier {
         continue;
       }
 
-      if (food.quantity > 1) {
-        updated.add(food.copyWith(quantity: food.quantity - 1));
+      final newAmount = food.amount - 1;
+
+      if (newAmount > 0) {
+        updated.add(food.copyWith(amount: newAmount));
       }
     }
 
@@ -101,5 +109,52 @@ class FridgeStore extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     final encoded = jsonEncode(_foods.map((food) => food.toJson()).toList());
     await prefs.setString(_storageKey, encoded);
+  }
+
+  static List<FoodItem> _addOrMergeFood(
+    List<FoodItem> currentFoods,
+    FoodItem newFood,
+  ) {
+    final index = currentFoods.indexWhere(
+      (food) => _canMerge(food, newFood),
+    );
+
+    if (index == -1) {
+      return [newFood, ...currentFoods];
+    }
+
+    final updatedFoods = [...currentFoods];
+    final existingFood = updatedFoods[index];
+
+    updatedFoods[index] = existingFood.copyWith(
+      amount: existingFood.amount + newFood.amount,
+      expiryDate: _earliestDate(existingFood.expiryDate, newFood.expiryDate),
+    );
+
+    return updatedFoods;
+  }
+
+  static List<FoodItem> _mergeDuplicates(List<FoodItem> foods) {
+    var mergedFoods = <FoodItem>[];
+
+    for (final food in foods) {
+      mergedFoods = _addOrMergeFood(mergedFoods, food);
+    }
+
+    return mergedFoods;
+  }
+
+  static bool _canMerge(FoodItem a, FoodItem b) {
+    return _normalizeName(a.name) == _normalizeName(b.name) &&
+        a.unit == b.unit &&
+        a.category == b.category;
+  }
+
+  static String _normalizeName(String value) {
+    return value.trim().toLowerCase();
+  }
+
+  static DateTime _earliestDate(DateTime a, DateTime b) {
+    return a.isBefore(b) ? a : b;
   }
 }
