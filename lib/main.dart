@@ -152,7 +152,10 @@ class _MainNavigationState extends State<MainNavigation> {
         profileStore: profileStore,
         shoppingListStore: shoppingListStore,
       ),
-      ShoppingListScreen(store: shoppingListStore),
+      ShoppingListScreen(
+        shoppingStore: shoppingListStore,
+        fridgeStore: fridgeStore,
+      ),
       ProfileScreen(store: profileStore),
     ];
 

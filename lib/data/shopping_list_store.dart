@@ -67,6 +67,15 @@ class ShoppingListStore extends ChangeNotifier {
     _save();
   }
 
+  void deleteItemsByIds(List<String> ids) {
+    if (ids.isEmpty) return;
+
+    final idsToDelete = ids.toSet();
+    _items = _items.where((item) => !idsToDelete.contains(item.id)).toList();
+    notifyListeners();
+    _save();
+  }
+
   void clearChecked() {
     _items = _items.where((item) => !item.isChecked).toList();
     notifyListeners();

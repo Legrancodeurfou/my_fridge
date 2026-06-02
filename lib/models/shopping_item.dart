@@ -45,6 +45,7 @@ class ShoppingItem {
 
   factory ShoppingItem.fromJson(Map<String, dynamic> json) {
     final rawAmount = json['amount'];
+
     final amount = switch (rawAmount) {
       final int value => value.toDouble(),
       final double value => value,
