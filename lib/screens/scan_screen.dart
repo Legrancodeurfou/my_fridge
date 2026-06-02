@@ -1278,7 +1278,7 @@ class _ManualFoodFormSheetState extends State<_ManualFoodFormSheet> {
                 ),
                 const SizedBox(height: 14),
                 DropdownButtonFormField<FoodCategory>(
-                  value: _category,
+                  initialValue: _category,
                   decoration: const InputDecoration(
                     labelText: 'Catégorie',
                     prefixIcon: Icon(Icons.category_rounded),
@@ -1309,7 +1309,7 @@ class _ManualFoodFormSheetState extends State<_ManualFoodFormSheet> {
                     SizedBox(
                       width: 130,
                       child: DropdownButtonFormField<String>(
-                        value: _unit,
+                        initialValue: _unit,
                         decoration: const InputDecoration(labelText: 'Unité'),
                         items: MeasurementHelper.units.map((unit) {
                           return DropdownMenuItem(
