@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'data/favorite_recipes_store.dart';
 import 'data/fridge_store.dart';
 import 'data/profile_store.dart';
+import 'data/recipe_notes_store.dart';
 import 'data/scan_history_store.dart';
 import 'data/shopping_list_store.dart';
 import 'screens/fridge_screen.dart';
@@ -56,6 +57,7 @@ class _AppStores {
     required this.shoppingListStore,
     required this.scanHistoryStore,
     required this.favoriteRecipesStore,
+    required this.recipeNotesStore,
   });
 
   final FridgeStore fridgeStore;
@@ -63,6 +65,7 @@ class _AppStores {
   final ShoppingListStore shoppingListStore;
   final ScanHistoryStore scanHistoryStore;
   final FavoriteRecipesStore favoriteRecipesStore;
+  final RecipeNotesStore recipeNotesStore;
 
   static Future<_AppStores> load() async {
     final results = await Future.wait([
@@ -71,6 +74,7 @@ class _AppStores {
       ShoppingListStore.load(),
       ScanHistoryStore.load(),
       FavoriteRecipesStore.load(),
+      RecipeNotesStore.load(),
     ]);
 
     return _AppStores(
@@ -79,6 +83,7 @@ class _AppStores {
       shoppingListStore: results[2] as ShoppingListStore,
       scanHistoryStore: results[3] as ScanHistoryStore,
       favoriteRecipesStore: results[4] as FavoriteRecipesStore,
+      recipeNotesStore: results[5] as RecipeNotesStore,
     );
   }
 
@@ -88,6 +93,7 @@ class _AppStores {
     shoppingListStore.dispose();
     scanHistoryStore.dispose();
     favoriteRecipesStore.dispose();
+    recipeNotesStore.dispose();
   }
 }
 
@@ -158,6 +164,7 @@ class _MainNavigationState extends State<MainNavigation> {
     final shoppingListStore = widget.stores.shoppingListStore;
     final scanHistoryStore = widget.stores.scanHistoryStore;
     final favoriteRecipesStore = widget.stores.favoriteRecipesStore;
+    final recipeNotesStore = widget.stores.recipeNotesStore;
 
     final screens = [
       HomeScreen(
@@ -180,6 +187,7 @@ class _MainNavigationState extends State<MainNavigation> {
         profileStore: profileStore,
         shoppingListStore: shoppingListStore,
         favoriteRecipesStore: favoriteRecipesStore,
+        recipeNotesStore: recipeNotesStore,
       ),
       ShoppingListScreen(
         shoppingStore: shoppingListStore,

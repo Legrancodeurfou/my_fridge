@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/favorite_recipes_store.dart';
 import '../data/fridge_store.dart';
 import '../data/profile_store.dart';
+import '../data/recipe_notes_store.dart';
 import '../data/shopping_list_store.dart';
 import '../models/food.dart';
 import '../models/shopping_item.dart';
@@ -14,12 +15,14 @@ class RecipesScreen extends StatelessWidget {
     required this.profileStore,
     required this.shoppingListStore,
     required this.favoriteRecipesStore,
+    required this.recipeNotesStore,
   });
 
   final FridgeStore store;
   final ProfileStore profileStore;
   final ShoppingListStore shoppingListStore;
   final FavoriteRecipesStore favoriteRecipesStore;
+  final RecipeNotesStore recipeNotesStore;
 
   @override
   Widget build(BuildContext context) {
@@ -30,6 +33,7 @@ class RecipesScreen extends StatelessWidget {
         profileStore: profileStore,
         shoppingListStore: shoppingListStore,
         favoriteRecipesStore: favoriteRecipesStore,
+        recipeNotesStore: recipeNotesStore,
       ),
     );
   }
@@ -41,12 +45,14 @@ class _RecipesContent extends StatelessWidget {
     required this.profileStore,
     required this.shoppingListStore,
     required this.favoriteRecipesStore,
+    required this.recipeNotesStore,
   });
 
   final FridgeStore store;
   final ProfileStore profileStore;
   final ShoppingListStore shoppingListStore;
   final FavoriteRecipesStore favoriteRecipesStore;
+  final RecipeNotesStore recipeNotesStore;
 
   @override
   Widget build(BuildContext context) {
@@ -97,6 +103,7 @@ class _RecipesContent extends StatelessWidget {
                         store: store,
                         shoppingListStore: shoppingListStore,
                         favoriteRecipesStore: favoriteRecipesStore,
+                        recipeNotesStore: recipeNotesStore,
                       ),
                     ),
                   ),
@@ -134,6 +141,7 @@ class _RecipesContent extends StatelessWidget {
                         store: store,
                         shoppingListStore: shoppingListStore,
                         favoriteRecipesStore: favoriteRecipesStore,
+                        recipeNotesStore: recipeNotesStore,
                       ),
                     ),
                   ),
@@ -977,12 +985,14 @@ class _RecipeCard extends StatelessWidget {
     required this.store,
     required this.shoppingListStore,
     required this.favoriteRecipesStore,
+    required this.recipeNotesStore,
   });
 
   final RecipeSuggestion recipe;
   final FridgeStore store;
   final ShoppingListStore shoppingListStore;
   final FavoriteRecipesStore favoriteRecipesStore;
+  final RecipeNotesStore recipeNotesStore;
 
   void _showRecipeDetails(BuildContext context) {
     showModalBottomSheet<void>(
@@ -995,6 +1005,7 @@ class _RecipeCard extends StatelessWidget {
           store: store,
           shoppingListStore: shoppingListStore,
           favoriteRecipesStore: favoriteRecipesStore,
+          recipeNotesStore: recipeNotesStore,
         );
       },
     );
@@ -1216,12 +1227,14 @@ class _RecipeDetailSheet extends StatelessWidget {
     required this.store,
     required this.shoppingListStore,
     required this.favoriteRecipesStore,
+    required this.recipeNotesStore,
   });
 
   final RecipeSuggestion recipe;
   final FridgeStore store;
   final ShoppingListStore shoppingListStore;
   final FavoriteRecipesStore favoriteRecipesStore;
+  final RecipeNotesStore recipeNotesStore;
 
   void _addMissingToShoppingList(BuildContext context) {
     final missingItems = RecipeCatalog.missingShoppingItems(recipe, store.foods);
@@ -1500,6 +1513,11 @@ class _RecipeDetailSheet extends StatelessWidget {
                       ),
                     ],
                     const SizedBox(height: 24),
+                    _RecipeNotesCard(
+                      recipeName: recipe.name,
+                      recipeNotesStore: recipeNotesStore,
+                    ),
+                    const SizedBox(height: 24),
                     Text(
                       'Étapes',
                       style: theme.textTheme.titleSmall?.copyWith(
@@ -1533,6 +1551,144 @@ class _RecipeDetailSheet extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+
+class _RecipeNotesCard extends StatefulWidget {
+  const _RecipeNotesCard({
+    required this.recipeName,
+    required this.recipeNotesStore,
+  });
+
+  final String recipeName;
+  final RecipeNotesStore recipeNotesStore;
+
+  @override
+  State<_RecipeNotesCard> createState() => _RecipeNotesCardState();
+}
+
+class _RecipeNotesCardState extends State<_RecipeNotesCard> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(
+      text: widget.recipeNotesStore.noteFor(widget.recipeName),
+    );
+    _controller.addListener(_onNoteChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant _RecipeNotesCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.recipeName != widget.recipeName) {
+      final nextNote = widget.recipeNotesStore.noteFor(widget.recipeName);
+      if (_controller.text != nextNote) {
+        _controller.text = nextNote;
+        _controller.selection = TextSelection.fromPosition(
+          TextPosition(offset: _controller.text.length),
+        );
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller
+      ..removeListener(_onNoteChanged)
+      ..dispose();
+    super.dispose();
+  }
+
+  void _onNoteChanged() {
+    widget.recipeNotesStore.updateNote(widget.recipeName, _controller.text);
+  }
+
+  void _clearNote() {
+    _controller.clear();
+    widget.recipeNotesStore.deleteNote(widget.recipeName);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.55),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.edit_note_rounded,
+                color: colorScheme.primary,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Mes notes',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              ValueListenableBuilder<TextEditingValue>(
+                valueListenable: _controller,
+                builder: (context, value, _) {
+                  if (value.text.trim().isEmpty) {
+                    return const SizedBox.shrink();
+                  }
+
+                  return IconButton(
+                    tooltip: 'Effacer la note',
+                    onPressed: _clearNote,
+                    icon: const Icon(Icons.close_rounded),
+                  );
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _controller,
+            minLines: 2,
+            maxLines: 5,
+            textInputAction: TextInputAction.newline,
+            decoration: InputDecoration(
+              hintText: 'Ex : mettre moins de crème, ajouter du poivre...',
+              filled: true,
+              fillColor: colorScheme.surface,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide.none,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(
+                  color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(color: colorScheme.primary, width: 1.4),
+              ),
+              contentPadding: const EdgeInsets.all(14),
+            ),
+          ),
+        ],
       ),
     );
   }
