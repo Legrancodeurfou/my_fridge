@@ -1,16 +1,25 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../data/fridge_store.dart';
+import '../data/shopping_list_store.dart';
 import '../models/food.dart';
+import '../models/shopping_item.dart';
 
 // ---------------------------------------------------------------------------
 // Écran principal
 // ---------------------------------------------------------------------------
 
 class FridgeScreen extends StatefulWidget {
-  const FridgeScreen({super.key, required this.store});
+  const FridgeScreen({
+    super.key,
+    required this.store,
+    required this.shoppingStore,
+  });
 
   final FridgeStore store;
+  final ShoppingListStore shoppingStore;
 
   @override
   State<FridgeScreen> createState() => _FridgeScreenState();
@@ -62,8 +71,64 @@ class _FridgeScreenState extends State<FridgeScreen> {
             _showFoodFormSheet(foodToEdit: food);
           },
           onDelete: () => _confirmDeleteFood(sheetContext, food),
+          onAddToShoppingList: () => _addFoodToShoppingList(sheetContext, food),
+          onConsumeAmount: () {
+            Navigator.pop(sheetContext);
+            _showConsumeAmountSheet(food);
+          },
         );
       },
+    );
+  }
+
+
+  void _addFoodToShoppingList(BuildContext sheetContext, FoodItem food) {
+    widget.shoppingStore.addItem(
+      ShoppingItem(
+        id: 'fridge_${food.id}_${DateTime.now().millisecondsSinceEpoch}',
+        name: food.name,
+        amount: food.amount,
+        unit: food.unit,
+      ),
+    );
+
+    if (sheetContext.mounted) Navigator.pop(sheetContext);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        content: Text('${food.name} ajouté à la liste de courses'),
+      ),
+    );
+  }
+
+  Future<void> _showConsumeAmountSheet(FoodItem food) async {
+    final amountToConsume = await showModalBottomSheet<double>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return _ConsumeAmountSheet(food: food);
+      },
+    );
+
+    if (amountToConsume == null || amountToConsume <= 0 || !mounted) return;
+
+    widget.store.consumeFoodAmounts({food.id: amountToConsume});
+
+    final isFullyConsumed = amountToConsume >= food.amount;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        content: Text(
+          isFullyConsumed
+              ? '${food.name} retiré du frigo'
+              : '${MeasurementHelper.label(amountToConsume, food.unit)} consommé',
+        ),
+      ),
     );
   }
 
@@ -614,11 +679,15 @@ class _FoodDetailSheet extends StatelessWidget {
     required this.food,
     required this.onEdit,
     required this.onDelete,
+    required this.onAddToShoppingList,
+    required this.onConsumeAmount,
   });
 
   final FoodItem food;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final VoidCallback onAddToShoppingList;
+  final VoidCallback onConsumeAmount;
 
   String _formatExpiryDate(DateTime date) {
     const months = [
@@ -738,10 +807,34 @@ class _FoodDetailSheet extends StatelessWidget {
               ),
               const SizedBox(height: 28),
               FilledButton.icon(
+                onPressed: onConsumeAmount,
+                icon: const Icon(Icons.restaurant_rounded),
+                label: const Text('Consommer une partie'),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: onAddToShoppingList,
+                icon: const Icon(Icons.add_shopping_cart_rounded),
+                label: const Text('Ajouter à ma liste de courses'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
                 onPressed: onEdit,
                 icon: const Icon(Icons.edit_outlined),
                 label: const Text('Modifier'),
-                style: FilledButton.styleFrom(
+                style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
@@ -763,6 +856,167 @@ class _FoodDetailSheet extends StatelessWidget {
                     borderRadius: BorderRadius.circular(14),
                   ),
                 ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+
+class _ConsumeAmountSheet extends StatefulWidget {
+  const _ConsumeAmountSheet({required this.food});
+
+  final FoodItem food;
+
+  @override
+  State<_ConsumeAmountSheet> createState() => _ConsumeAmountSheetState();
+}
+
+class _ConsumeAmountSheetState extends State<_ConsumeAmountSheet> {
+  late double _amount;
+
+  double get _step => MeasurementHelper.stepFor(widget.food.unit);
+
+  @override
+  void initState() {
+    super.initState();
+    _amount = math.min(_step, widget.food.amount);
+  }
+
+  void _incrementAmount() {
+    setState(() {
+      _amount = math.min(widget.food.amount, _amount + _step);
+    });
+  }
+
+  void _decrementAmount() {
+    setState(() {
+      _amount = math.max(_step, _amount - _step);
+      if (_amount > widget.food.amount) {
+        _amount = widget.food.amount;
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final remainingAmount = widget.food.amount - _amount;
+    final consumesAll = remainingAmount <= 0;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: colorScheme.outlineVariant,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Consommer ${widget.food.name}',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.3,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Quantité disponible : ${widget.food.amountLabel}',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: colorScheme.outlineVariant.withValues(alpha: 0.45),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Quantité consommée',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            MeasurementHelper.label(_amount, widget.food.unit),
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.w800,
+                              color: colorScheme.primary,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            consumesAll
+                                ? 'L’aliment sera retiré du frigo.'
+                                : 'Restera ${MeasurementHelper.label(remainingAmount, widget.food.unit)}.',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    _FridgeQuantityStepper(
+                      amountLabel: '',
+                      canDecrement: _amount > _step,
+                      onDecrement: _decrementAmount,
+                      onIncrement: _amount >= widget.food.amount
+                          ? () {}
+                          : _incrementAmount,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              FilledButton.icon(
+                onPressed: () => Navigator.pop(context, _amount),
+                icon: const Icon(Icons.check_rounded),
+                label: Text(
+                  consumesAll ? 'Tout consommer' : 'Valider la consommation',
+                ),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Annuler'),
               ),
             ],
           ),

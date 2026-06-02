@@ -3,9 +3,14 @@ import 'package:flutter/material.dart';
 import '../data/profile_store.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key, required this.store});
+  const ProfileScreen({
+    super.key,
+    required this.store,
+    required this.onResetDemoData,
+  });
 
   final ProfileStore store;
+  final Future<void> Function() onResetDemoData;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -31,6 +36,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   void _onNameChanged() {
     widget.store.updateName(_nameController.text);
+  }
+
+
+  Future<void> _confirmResetDemoData() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Réinitialiser les données ?'),
+          content: const Text(
+            'Le frigo reviendra aux aliments de démo. La liste de courses et l’historique des scans seront vidés. Ton profil sera conservé.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Annuler'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Réinitialiser'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    await widget.onResetDemoData();
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        content: const Text('Données de démo réinitialisées'),
+      ),
+    );
   }
 
   @override
@@ -115,6 +158,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 value: profile.hasThermomix,
                 onChanged: widget.store.updateThermomix,
               ),
+              const SizedBox(height: 24),
+              const _SectionTitle(title: 'Données de test'),
+              const SizedBox(height: 8),
+              _ResetDataCard(onReset: _confirmResetDemoData),
               const SizedBox(height: 24),
               const _InfoCard(
                 icon: Icons.info_outline_rounded,
@@ -269,6 +316,65 @@ class _SwitchCard extends StatelessWidget {
         contentPadding: EdgeInsets.zero,
         secondary: Icon(icon, color: colorScheme.primary),
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+      ),
+    );
+  }
+}
+
+class _ResetDataCard extends StatelessWidget {
+  const _ResetDataCard({required this.onReset});
+
+  final VoidCallback onReset;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return _CardContainer(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.restart_alt_rounded, color: colorScheme.primary),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Réinitialiser l’app',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Remet le frigo de démo, vide les courses et l’historique. Le profil est conservé.',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: onReset,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Réinitialiser les données de démo'),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

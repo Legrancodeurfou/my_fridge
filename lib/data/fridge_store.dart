@@ -140,6 +140,12 @@ class FridgeStore extends ChangeNotifier {
     _save();
   }
 
+  void resetDemoData() {
+    _foods = FridgeMockDataSource.fetchAll();
+    notifyListeners();
+    _save();
+  }
+
   Future<void> _save() async {
     final prefs = await SharedPreferences.getInstance();
     final encoded = jsonEncode(_foods.map((food) => food.toJson()).toList());

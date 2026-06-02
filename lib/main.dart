@@ -137,6 +137,14 @@ class _MainNavigationState extends State<MainNavigation> {
     setState(() => _selectedIndex = index);
   }
 
+
+  Future<void> _resetDemoData() async {
+    widget.stores.fridgeStore.resetDemoData();
+    widget.stores.shoppingListStore.clearAll();
+    widget.stores.scanHistoryStore.clearAll();
+    setState(() => _selectedIndex = 0);
+  }
+
   @override
   Widget build(BuildContext context) {
     final fridgeStore = widget.stores.fridgeStore;
@@ -151,7 +159,10 @@ class _MainNavigationState extends State<MainNavigation> {
         scanHistoryStore: scanHistoryStore,
         onNavigateToTab: _goToTab,
       ),
-      FridgeScreen(store: fridgeStore),
+      FridgeScreen(
+        store: fridgeStore,
+        shoppingStore: shoppingListStore,
+      ),
       ScanScreen(
         store: fridgeStore,
         historyStore: scanHistoryStore,
@@ -166,7 +177,10 @@ class _MainNavigationState extends State<MainNavigation> {
         shoppingStore: shoppingListStore,
         fridgeStore: fridgeStore,
       ),
-      ProfileScreen(store: profileStore),
+      ProfileScreen(
+        store: profileStore,
+        onResetDemoData: _resetDemoData,
+      ),
     ];
 
     return Scaffold(
