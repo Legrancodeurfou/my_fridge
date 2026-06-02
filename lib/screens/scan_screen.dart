@@ -6,18 +6,22 @@ import 'package:flutter/foundation.dart';
 import 'package:file_picker/file_picker.dart';
 
 import '../data/fridge_store.dart';
+import '../data/scan_history_store.dart';
 import '../models/detected_product_draft.dart';
 import '../models/food.dart';
+import '../models/scan_history_item.dart';
 import '../services/ticket_analysis_service.dart';
 
 class ScanScreen extends StatefulWidget {
   const ScanScreen({
     super.key,
     required this.store,
+    required this.historyStore,
     required this.onNavigateToFridge,
   });
 
   final FridgeStore store;
+  final ScanHistoryStore historyStore;
   final VoidCallback onNavigateToFridge;
 
   @override
@@ -171,6 +175,10 @@ Future<void> _pickImage(ImageSource source) async {
           onCancel: () => Navigator.pop(sheetContext),
           onValidate: (selectedFoods) {
             widget.store.addFoods(selectedFoods);
+            widget.historyStore.addScan(
+              detectedCount: detectedDrafts.length,
+              validatedFoods: selectedFoods,
+            );
             Navigator.pop(sheetContext);
 
             final count = selectedFoods.length;
@@ -224,44 +232,65 @@ Future<void> _pickImage(ImageSource source) async {
   }
 
   Widget _buildInitialContent(BuildContext context) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        const Icon(
-          Icons.camera_alt,
-          size: 90,
-        ),
-        const SizedBox(height: 24),
-        const Text(
-          'Scanne ton ticket de caisse',
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 12),
-        const Text(
-          'Prends une photo de ton ticket pour ajouter automatiquement tes produits dans ton frigo.',
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 16),
-        ),
-        const SizedBox(height: 32),
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton.icon(
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: 32),
+          Icon(
+            Icons.camera_alt_rounded,
+            size: 90,
+            color: colorScheme.primary,
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'Scanne ton ticket de caisse',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.3,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Prends une photo de ton ticket pour ajouter automatiquement tes produits dans ton frigo.',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyLarge?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 32),
+          FilledButton.icon(
             onPressed: _isScanning ? null : _showImageSourceSheet,
-            icon: const Icon(Icons.photo_camera),
+            icon: const Icon(Icons.photo_camera_rounded),
             label: const Text('Prendre une photo'),
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
           ),
-        ),
-        const SizedBox(height: 12),
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
             onPressed: _isScanning ? null : () {},
-            icon: const Icon(Icons.edit),
+            icon: const Icon(Icons.edit_rounded),
             label: const Text('Ajouter manuellement'),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
           ),
-        ),
-      ],
+          const SizedBox(height: 32),
+          _RecentScansSection(historyStore: widget.historyStore),
+        ],
+      ),
     );
   }
 
@@ -327,6 +356,296 @@ Future<void> _pickImage(ImageSource source) async {
 }
 
 /// Carte d’aperçu du ticket (style aligné sur les cartes du frigo).
+
+class _RecentScansSection extends StatelessWidget {
+  const _RecentScansSection({required this.historyStore});
+
+  final ScanHistoryStore historyStore;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: historyStore,
+      builder: (context, _) {
+        final scans = historyStore.recent(limit: 3);
+        final theme = Theme.of(context);
+        final colorScheme = theme.colorScheme;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Derniers scans',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                if (historyStore.items.isNotEmpty)
+                  TextButton(
+                    onPressed: () => _confirmClearHistory(context),
+                    child: const Text('Effacer'),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (scans.isEmpty)
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: colorScheme.surface,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: colorScheme.outlineVariant.withValues(alpha: 0.45),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.history_rounded,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Aucun scan pour l’instant. Les tickets validés apparaîtront ici.',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else
+              ...scans.map(
+                (scan) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: _ScanHistoryCard(
+                    scan: scan,
+                    onTap: () => _showScanDetails(context, scan),
+                    onDelete: () => historyStore.deleteScan(scan.id),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _confirmClearHistory(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Effacer l’historique ?'),
+          content: const Text('Tous les scans enregistrés seront supprimés.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Annuler'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Effacer'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true) historyStore.clearAll();
+  }
+
+  void _showScanDetails(BuildContext context, ScanHistoryItem scan) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => _ScanHistoryDetailSheet(scan: scan),
+    );
+  }
+}
+
+class _ScanHistoryCard extends StatelessWidget {
+  const _ScanHistoryCard({
+    required this.scan,
+    required this.onTap,
+    required this.onDelete,
+  });
+
+  final ScanHistoryItem scan;
+  final VoidCallback onTap;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Material(
+      color: colorScheme.surface,
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: colorScheme.outlineVariant.withValues(alpha: 0.45),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: colorScheme.primaryContainer.withValues(alpha: 0.45),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(Icons.receipt_long_rounded, color: colorScheme.primary),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _formatScanDate(scan.scannedAt),
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '${scan.validatedCount}/${scan.detectedCount} produit${scan.detectedCount > 1 ? 's' : ''} ajouté${scan.validatedCount > 1 ? 's' : ''}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      scan.summary,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                onPressed: onDelete,
+                icon: Icon(Icons.delete_outline_rounded, color: colorScheme.error),
+                tooltip: 'Supprimer',
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ScanHistoryDetailSheet extends StatelessWidget {
+  const _ScanHistoryDetailSheet({required this.scan});
+
+  final ScanHistoryItem scan;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: colorScheme.outlineVariant,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Détail du scan',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                _formatScanDate(scan.scannedAt),
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 18),
+              ...scan.products.map(
+                (product) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          product.name,
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        product.amountLabel,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.primary,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String _formatScanDate(DateTime date) {
+  final now = DateTime.now();
+  final isToday = date.year == now.year && date.month == now.month && date.day == now.day;
+  final day = isToday
+      ? 'Aujourd’hui'
+      : '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+  final hour = date.hour.toString().padLeft(2, '0');
+  final minute = date.minute.toString().padLeft(2, '0');
+  return '$day à $hour:$minute';
+}
+
 class _TicketPreviewCard extends StatelessWidget {
   const _TicketPreviewCard({
     required this.imageBytes,

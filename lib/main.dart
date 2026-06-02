@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'data/fridge_store.dart';
 import 'data/profile_store.dart';
+import 'data/scan_history_store.dart';
 import 'data/shopping_list_store.dart';
 import 'screens/fridge_screen.dart';
 import 'screens/home_screen.dart';
@@ -52,23 +53,27 @@ class _AppStores {
     required this.fridgeStore,
     required this.profileStore,
     required this.shoppingListStore,
+    required this.scanHistoryStore,
   });
 
   final FridgeStore fridgeStore;
   final ProfileStore profileStore;
   final ShoppingListStore shoppingListStore;
+  final ScanHistoryStore scanHistoryStore;
 
   static Future<_AppStores> load() async {
     final results = await Future.wait([
       FridgeStore.load(),
       ProfileStore.load(),
       ShoppingListStore.load(),
+      ScanHistoryStore.load(),
     ]);
 
     return _AppStores(
       fridgeStore: results[0] as FridgeStore,
       profileStore: results[1] as ProfileStore,
       shoppingListStore: results[2] as ShoppingListStore,
+      scanHistoryStore: results[3] as ScanHistoryStore,
     );
   }
 
@@ -76,6 +81,7 @@ class _AppStores {
     fridgeStore.dispose();
     profileStore.dispose();
     shoppingListStore.dispose();
+    scanHistoryStore.dispose();
   }
 }
 
@@ -136,6 +142,7 @@ class _MainNavigationState extends State<MainNavigation> {
     final fridgeStore = widget.stores.fridgeStore;
     final profileStore = widget.stores.profileStore;
     final shoppingListStore = widget.stores.shoppingListStore;
+    final scanHistoryStore = widget.stores.scanHistoryStore;
 
     final screens = [
       HomeScreen(
@@ -145,6 +152,7 @@ class _MainNavigationState extends State<MainNavigation> {
       FridgeScreen(store: fridgeStore),
       ScanScreen(
         store: fridgeStore,
+        historyStore: scanHistoryStore,
         onNavigateToFridge: _goToFridge,
       ),
       RecipesScreen(
