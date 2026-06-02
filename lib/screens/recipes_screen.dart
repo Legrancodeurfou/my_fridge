@@ -118,7 +118,7 @@ class RecipeIngredient {
   final double requiredAmount;
   final String requiredUnit;
 
-  String get requiredAmountLabel => '$requiredAmount $requiredUnit';
+  String get requiredAmountLabel => MeasurementHelper.label(requiredAmount, requiredUnit);
 }
 
 class RecipeSuggestion {
@@ -191,8 +191,16 @@ class RecipeIngredientMatch {
   String get fridgeDisplayLabel {
     if (matchedFoodName == null) return requiredDisplayLabel;
 
-    if (matchedFoodUnit == ingredient.requiredUnit && matchedFoodAmount != null) {
-      return '$matchedFoodName $matchedFoodAmount/${ingredient.requiredAmount} ${ingredient.requiredUnit}';
+    if (matchedFoodUnit != null &&
+        RecipeCatalog.normalizeUnitForDisplay(matchedFoodUnit!) ==
+            RecipeCatalog.normalizeUnitForDisplay(ingredient.requiredUnit) &&
+        matchedFoodAmount != null) {
+      final current = MeasurementHelper.inputValue(matchedFoodAmount!);
+      final required = MeasurementHelper.inputValue(ingredient.requiredAmount);
+      final unit = MeasurementHelper.label(ingredient.requiredAmount, ingredient.requiredUnit)
+          .replaceFirst(required, '')
+          .trim();
+      return '$matchedFoodName $current/$required $unit';
     }
 
     final current = matchedFoodAmountLabel ?? 'quantité inconnue';
@@ -479,6 +487,195 @@ abstract final class RecipeCatalog {
       ),
     );
 
+    addIf(
+      _hasAny(names, ['riz']) || _hasAny(names, ['poulet']),
+      const RecipeSuggestion(
+        emoji: '🍚',
+        name: 'Riz sauté au poulet',
+        time: '18 min',
+        description:
+            'Un plat complet et rapide avec du riz, du poulet et des légumes.',
+        requiredIngredients: [
+          RecipeIngredient(
+            label: 'Riz',
+            keywords: ['riz'],
+            requiredAmount: 300,
+            requiredUnit: 'g',
+          ),
+          RecipeIngredient(
+            label: 'Poulet',
+            keywords: ['poulet'],
+            requiredAmount: 300,
+            requiredUnit: 'g',
+          ),
+          RecipeIngredient(
+            label: 'Courgettes',
+            keywords: ['courgette'],
+            requiredAmount: 2,
+            requiredUnit: 'unités',
+          ),
+        ],
+        steps: [
+          'Fais cuire le riz dans une casserole d’eau salée.',
+          'Coupe le poulet et les courgettes en morceaux.',
+          'Fais revenir le poulet dans une poêle chaude jusqu’à ce qu’il soit doré.',
+          'Ajoute les courgettes et cuis encore quelques minutes.',
+          'Mélange avec le riz, assaisonne et sers chaud.',
+        ],
+      ),
+    );
+
+    addIf(
+      _hasAny(names, ['poulet']) && _hasAny(names, ['courgette']),
+      const RecipeSuggestion(
+        emoji: '🍗',
+        name: 'Poulet courgettes Airfryer',
+        time: '16 min',
+        requiresAirfryer: true,
+        description:
+            'Une option croustillante et pratique si tu as un Airfryer.',
+        requiredIngredients: [
+          RecipeIngredient(
+            label: 'Poulet',
+            keywords: ['poulet'],
+            requiredAmount: 300,
+            requiredUnit: 'g',
+          ),
+          RecipeIngredient(
+            label: 'Courgettes',
+            keywords: ['courgette'],
+            requiredAmount: 2,
+            requiredUnit: 'unités',
+          ),
+          RecipeIngredient(
+            label: 'Emmental',
+            keywords: ['emmental', 'fromage'],
+            requiredAmount: 50,
+            requiredUnit: 'g',
+          ),
+        ],
+        steps: [
+          'Coupe le poulet et les courgettes en morceaux réguliers.',
+          'Assaisonne avec sel, poivre et un filet d’huile.',
+          'Place le tout dans l’Airfryer 12 à 15 minutes.',
+          'Ajoute un peu d’emmental en fin de cuisson si tu en as.',
+        ],
+      ),
+    );
+
+    addIf(
+      _hasAny(names, ['pain']) || _hasAny(names, ['mozzarella']),
+      const RecipeSuggestion(
+        emoji: '🍅',
+        name: 'Tartines tomate mozzarella',
+        time: '8 min',
+        difficulty: RecipeDifficulty.beginner,
+        description:
+            'Des tartines très rapides avec pain, tomates et mozzarella.',
+        requiredIngredients: [
+          RecipeIngredient(
+            label: 'Pain',
+            keywords: ['pain'],
+            requiredAmount: 2,
+            requiredUnit: 'tranches',
+          ),
+          RecipeIngredient(
+            label: 'Tomates',
+            keywords: ['tomate'],
+            requiredAmount: 2,
+            requiredUnit: 'unités',
+          ),
+          RecipeIngredient(
+            label: 'Mozzarella',
+            keywords: ['mozzarella'],
+            requiredAmount: 125,
+            requiredUnit: 'g',
+          ),
+        ],
+        steps: [
+          'Fais légèrement griller les tranches de pain.',
+          'Coupe les tomates et la mozzarella en tranches.',
+          'Dispose-les sur le pain avec sel, poivre et un filet d’huile.',
+          'Sers immédiatement avec une salade si tu en as.',
+        ],
+      ),
+    );
+
+    addIf(
+      _hasAny(names, ['tortilla', 'tortillas']) || _hasAny(names, ['avocat']),
+      const RecipeSuggestion(
+        emoji: '🌯',
+        name: 'Wrap steak avocat',
+        time: '15 min',
+        description:
+            'Un wrap rapide et rassasiant avec steak haché, avocat et fromage.',
+        requiredIngredients: [
+          RecipeIngredient(
+            label: 'Tortillas',
+            keywords: ['tortilla', 'tortillas'],
+            requiredAmount: 2,
+            requiredUnit: 'unités',
+          ),
+          RecipeIngredient(
+            label: 'Steak haché',
+            keywords: ['steak', 'haché', 'hache', 'viande'],
+            requiredAmount: 250,
+            requiredUnit: 'g',
+          ),
+          RecipeIngredient(
+            label: 'Avocat',
+            keywords: ['avocat'],
+            requiredAmount: 1,
+            requiredUnit: 'unité',
+          ),
+        ],
+        steps: [
+          'Fais cuire le steak haché dans une poêle chaude.',
+          'Écrase l’avocat avec un peu de sel et de poivre.',
+          'Garnis les tortillas avec la viande et l’avocat.',
+          'Roule les wraps et chauffe-les une minute à la poêle.',
+        ],
+      ),
+    );
+
+    addIf(
+      _hasAny(names, ['yaourt']),
+      const RecipeSuggestion(
+        emoji: '🥣',
+        name: 'Yaourt gourmand express',
+        time: '5 min',
+        difficulty: RecipeDifficulty.beginner,
+        description:
+            'Une idée ultra rapide pour utiliser les yaourts avant leur date.',
+        requiredIngredients: [
+          RecipeIngredient(
+            label: 'Yaourt nature',
+            keywords: ['yaourt'],
+            requiredAmount: 1,
+            requiredUnit: 'unité',
+          ),
+          RecipeIngredient(
+            label: 'Pain',
+            keywords: ['pain'],
+            requiredAmount: 1,
+            requiredUnit: 'tranche',
+          ),
+          RecipeIngredient(
+            label: 'Tomates',
+            keywords: ['tomate'],
+            requiredAmount: 1,
+            requiredUnit: 'unité',
+          ),
+        ],
+        steps: [
+          'Verse le yaourt dans un bol.',
+          'Ajoute ce que tu as sous la main pour compléter le repas.',
+          'Sers frais, en collation ou en accompagnement léger.',
+        ],
+      ),
+    );
+
+
     final filtered = _filterForProfile(recipes, profile);
     final sorted = _sortForProfile(filtered, profile, foods);
 
@@ -496,7 +693,8 @@ abstract final class RecipeCatalog {
         final name = food.name.toLowerCase();
         if (ingredient.keywords.any((keyword) => name.contains(keyword))) {
           final hasEnough =
-            _normalizeUnit(food.unit) == _normalizeUnit(ingredient.requiredUnit) &&
+            normalizeUnitForDisplay(food.unit) ==
+              normalizeUnitForDisplay(ingredient.requiredUnit) &&
             food.amount >= ingredient.requiredAmount;
 
           return RecipeIngredientMatch(
@@ -636,7 +834,7 @@ abstract final class RecipeCatalog {
     return score;
   }
 
-  static String _normalizeUnit(String unit) {
+  static String normalizeUnitForDisplay(String unit) {
   return unit
       .trim()
       .toLowerCase()
