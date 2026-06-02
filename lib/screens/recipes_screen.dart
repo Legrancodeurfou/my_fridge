@@ -2,25 +2,30 @@ import 'package:flutter/material.dart';
 
 import '../data/fridge_store.dart';
 import '../data/profile_store.dart';
+import '../data/shopping_list_store.dart';
 import '../models/food.dart';
+import '../models/shopping_item.dart';
 
 class RecipesScreen extends StatelessWidget {
   const RecipesScreen({
     super.key,
     required this.store,
     required this.profileStore,
+    required this.shoppingListStore,
   });
 
   final FridgeStore store;
   final ProfileStore profileStore;
+  final ShoppingListStore shoppingListStore;
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: Listenable.merge([store, profileStore]),
+      listenable: Listenable.merge([store, profileStore, shoppingListStore]),
       builder: (context, _) => _RecipesContent(
         store: store,
         profileStore: profileStore,
+        shoppingListStore: shoppingListStore,
       ),
     );
   }
@@ -30,10 +35,12 @@ class _RecipesContent extends StatelessWidget {
   const _RecipesContent({
     required this.store,
     required this.profileStore,
+    required this.shoppingListStore,
   });
 
   final FridgeStore store;
   final ProfileStore profileStore;
+  final ShoppingListStore shoppingListStore;
 
   @override
   Widget build(BuildContext context) {
@@ -84,6 +91,7 @@ class _RecipesContent extends StatelessWidget {
                         child: _RecipeCard(
                           recipe: recipe,
                           store: store,
+                          shoppingListStore: shoppingListStore,
                         ),
                       ),
                     ),
@@ -535,6 +543,26 @@ abstract final class RecipeCatalog {
     return result;
   }
 
+
+  static List<ShoppingItem> missingShoppingItems(
+    RecipeSuggestion recipe,
+    List<FoodItem> foods,
+  ) {
+    return matchIngredients(recipe, foods)
+        .where((match) => !match.isAvailable)
+        .map((match) {
+      final ingredient = match.ingredient;
+      return ShoppingItem(
+        id: '${DateTime.now().microsecondsSinceEpoch}_${ingredient.label}',
+        name: ingredient.label,
+        amount: match.missingAmount > 0
+            ? match.missingAmount
+            : ingredient.requiredAmount,
+        unit: ingredient.requiredUnit,
+      );
+    }).toList();
+  }
+
   static List<RecipeSuggestion> _filterForProfile(
     List<RecipeSuggestion> recipes,
     ProfileData? profile,
@@ -670,10 +698,12 @@ class _RecipeCard extends StatelessWidget {
   const _RecipeCard({
     required this.recipe,
     required this.store,
+    required this.shoppingListStore,
   });
 
   final RecipeSuggestion recipe;
   final FridgeStore store;
+  final ShoppingListStore shoppingListStore;
 
   void _showRecipeDetails(BuildContext context) {
     showModalBottomSheet<void>(
@@ -684,6 +714,7 @@ class _RecipeCard extends StatelessWidget {
         return _RecipeDetailSheet(
           recipe: recipe,
           store: store,
+          shoppingListStore: shoppingListStore,
         );
       },
     );
@@ -886,10 +917,27 @@ class _RecipeDetailSheet extends StatelessWidget {
   const _RecipeDetailSheet({
     required this.recipe,
     required this.store,
+    required this.shoppingListStore,
   });
 
   final RecipeSuggestion recipe;
   final FridgeStore store;
+  final ShoppingListStore shoppingListStore;
+
+  void _addMissingToShoppingList(BuildContext context) {
+    final missingItems = RecipeCatalog.missingShoppingItems(recipe, store.foods);
+    if (missingItems.isEmpty) return;
+
+    shoppingListStore.addItems(missingItems);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        content: const Text('Ingrédients ajoutés à la liste de courses'),
+      ),
+    );
+  }
 
   Future<void> _onCooked(BuildContext sheetContext) async {
     final foods = store.foods;
@@ -1123,6 +1171,18 @@ class _RecipeDetailSheet extends StatelessWidget {
                               ),
                             )
                             .toList(),
+                      ),
+                      const SizedBox(height: 14),
+                      FilledButton.tonalIcon(
+                        onPressed: () => _addMissingToShoppingList(context),
+                        icon: const Icon(Icons.shopping_cart_outlined),
+                        label: const Text('Ajouter les manquants à ma liste de courses'),
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
                       ),
                     ],
                     const SizedBox(height: 24),
