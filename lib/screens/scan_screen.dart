@@ -162,6 +162,39 @@ Future<void> _pickImage(ImageSource source) async {
     await _showValidationSheet(detectedDrafts);
   }
 
+  Future<void> _showManualAddSheet() {
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(sheetContext).bottom,
+          ),
+          child: _ManualFoodFormSheet(
+            onSave: (food) {
+              widget.store.addFood(food);
+              Navigator.pop(sheetContext);
+
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  content: Text('${food.name} ajouté au frigo'),
+                ),
+              );
+
+              widget.onNavigateToFridge();
+            },
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _showValidationSheet(List<DetectedProductDraft> detectedDrafts) {
     return showModalBottomSheet<void>(
       context: context,
@@ -216,6 +249,20 @@ Future<void> _pickImage(ImageSource source) async {
         elevation: 0,
         scrolledUnderElevation: 0,
         backgroundColor: colorScheme.surfaceContainerLowest,
+        actions: [
+          if (_pickedImageBytes != null)
+            IconButton(
+              tooltip: 'Fermer l’aperçu',
+              icon: const Icon(Icons.close_rounded),
+              onPressed: _isScanning
+                  ? null
+                  : () {
+                      setState(() {
+                        _pickedImageBytes = null;
+                      });
+                    },
+            ),
+        ],
       ),
       body: Stack(
         children: [
@@ -277,7 +324,7 @@ Future<void> _pickImage(ImageSource source) async {
           ),
           const SizedBox(height: 12),
           OutlinedButton.icon(
-            onPressed: _isScanning ? null : () {},
+            onPressed: _isScanning ? null : _showManualAddSheet,
             icon: const Icon(Icons.edit_rounded),
             label: const Text('Ajouter manuellement'),
             style: OutlinedButton.styleFrom(
@@ -1062,6 +1109,326 @@ class _QuantityStepper extends StatelessWidget {
             tooltip: 'Augmenter',
             visualDensity: VisualDensity.compact,
             iconSize: 20,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ManualFoodFormSheet extends StatefulWidget {
+  const _ManualFoodFormSheet({required this.onSave});
+
+  final void Function(FoodItem food) onSave;
+
+  @override
+  State<_ManualFoodFormSheet> createState() => _ManualFoodFormSheetState();
+}
+
+class _ManualFoodFormSheetState extends State<_ManualFoodFormSheet> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _nameController;
+
+  double _amount = 1;
+  String _unit = 'unité';
+  FoodCategory _category = FoodCategory.other;
+  late DateTime _expiryDate;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController();
+    final now = DateTime.now();
+    _expiryDate = DateTime(now.year, now.month, now.day).add(
+      const Duration(days: 7),
+    );
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  void _incrementAmount() {
+    setState(() => _amount += MeasurementHelper.stepFor(_unit));
+  }
+
+  void _decrementAmount() {
+    final nextAmount = _amount - MeasurementHelper.stepFor(_unit);
+    if (nextAmount <= 0) return;
+    setState(() => _amount = nextAmount);
+  }
+
+  Future<void> _pickExpiryDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _expiryDate,
+      firstDate: DateTime(now.year, now.month, now.day),
+      lastDate: now.add(const Duration(days: 730)),
+    );
+
+    if (picked == null || !mounted) return;
+    setState(() => _expiryDate = DateTime(picked.year, picked.month, picked.day));
+  }
+
+  void _save() {
+    if (_formKey.currentState?.validate() != true) return;
+
+    final name = _nameController.text.trim();
+    final food = FoodItem(
+      id: 'manual_${DateTime.now().millisecondsSinceEpoch}',
+      name: name,
+      emoji: FoodCategoryHelper.emoji(_category),
+      expiryDate: _expiryDate,
+      category: _category,
+      quantity: MeasurementHelper.logicalQuantity(_amount, _unit),
+      amount: _amount,
+      unit: _unit,
+    );
+
+    widget.onSave(food);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * 0.9,
+      ),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: colorScheme.outlineVariant,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primaryContainer.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Icon(Icons.edit_rounded, color: colorScheme.primary),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Ajouter un produit',
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.3,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Ajoute un aliment sans scanner de ticket.',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 22),
+                TextFormField(
+                  controller: _nameController,
+                  textCapitalization: TextCapitalization.sentences,
+                  textInputAction: TextInputAction.next,
+                  decoration: const InputDecoration(
+                    labelText: 'Nom du produit',
+                    hintText: 'Ex : Pain, Riz, Poulet...',
+                    prefixIcon: Icon(Icons.kitchen_rounded),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Entre un nom de produit';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 14),
+                DropdownButtonFormField<FoodCategory>(
+                  value: _category,
+                  decoration: const InputDecoration(
+                    labelText: 'Catégorie',
+                    prefixIcon: Icon(Icons.category_rounded),
+                  ),
+                  items: FoodCategory.values.map((category) {
+                    return DropdownMenuItem(
+                      value: category,
+                      child: Text(FoodCategoryHelper.label(category)),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() => _category = value);
+                  },
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _ManualAmountStepper(
+                        amountLabel: MeasurementHelper.label(_amount, _unit),
+                        canDecrement: _amount > MeasurementHelper.stepFor(_unit),
+                        onDecrement: _decrementAmount,
+                        onIncrement: _incrementAmount,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    SizedBox(
+                      width: 130,
+                      child: DropdownButtonFormField<String>(
+                        value: _unit,
+                        decoration: const InputDecoration(labelText: 'Unité'),
+                        items: MeasurementHelper.units.map((unit) {
+                          return DropdownMenuItem(
+                            value: unit,
+                            child: Text(unit),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          if (value == null) return;
+                          setState(() {
+                            _unit = value;
+                            if (_amount <= 0) _amount = MeasurementHelper.stepFor(_unit);
+                          });
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                OutlinedButton.icon(
+                  onPressed: _pickExpiryDate,
+                  icon: const Icon(Icons.event_rounded),
+                  label: Text('DLC estimée : ${ExpiryHelper.labelFor(_expiryDate)}'),
+                  style: OutlinedButton.styleFrom(
+                    alignment: Alignment.centerLeft,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 22),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        child: const Text('Annuler'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: _save,
+                        icon: const Icon(Icons.add_rounded),
+                        label: const Text('Ajouter'),
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ManualAmountStepper extends StatelessWidget {
+  const _ManualAmountStepper({
+    required this.amountLabel,
+    required this.canDecrement,
+    required this.onDecrement,
+    required this.onIncrement,
+  });
+
+  final String amountLabel;
+  final bool canDecrement;
+  final VoidCallback onDecrement;
+  final VoidCallback onIncrement;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.55),
+        ),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: canDecrement ? onDecrement : null,
+            icon: const Icon(Icons.remove_rounded),
+            tooltip: 'Diminuer',
+          ),
+          Expanded(
+            child: Text(
+              amountLabel,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w800,
+                color: colorScheme.primary,
+              ),
+            ),
+          ),
+          IconButton(
+            onPressed: onIncrement,
+            icon: const Icon(Icons.add_rounded),
+            tooltip: 'Augmenter',
           ),
         ],
       ),
