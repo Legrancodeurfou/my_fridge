@@ -1,28 +1,47 @@
 import 'package:flutter/material.dart';
 
 import '../data/fridge_store.dart';
+import '../data/scan_history_store.dart';
+import '../data/shopping_list_store.dart';
 import '../models/food.dart';
+import '../models/scan_history_item.dart';
 import 'recipes_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({
     super.key,
     required this.store,
+    required this.shoppingListStore,
+    required this.scanHistoryStore,
     required this.onNavigateToTab,
   });
 
   final FridgeStore store;
+  final ShoppingListStore shoppingListStore;
+  final ScanHistoryStore scanHistoryStore;
   final void Function(int tabIndex) onNavigateToTab;
 
   static const fridgeTabIndex = 1;
   static const scanTabIndex = 2;
+  static const recipesTabIndex = 3;
+  static const shoppingTabIndex = 4;
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: store,
+      listenable: Listenable.merge([
+        store,
+        shoppingListStore,
+        scanHistoryStore,
+      ]),
       builder: (context, _) => _HomeContent(
         foods: store.foods,
+        shoppingItemsCount: shoppingListStore.items.length,
+        checkedShoppingItemsCount:
+            shoppingListStore.items.where((item) => item.isChecked).length,
+        latestScan: scanHistoryStore.items.isEmpty
+            ? null
+            : scanHistoryStore.items.first,
         onNavigateToTab: onNavigateToTab,
       ),
     );
@@ -32,11 +51,20 @@ class HomeScreen extends StatelessWidget {
 class _HomeContent extends StatelessWidget {
   const _HomeContent({
     required this.foods,
+    required this.shoppingItemsCount,
+    required this.checkedShoppingItemsCount,
+    required this.latestScan,
     required this.onNavigateToTab,
   });
 
   final List<FoodItem> foods;
+  final int shoppingItemsCount;
+  final int checkedShoppingItemsCount;
+  final ScanHistoryItem? latestScan;
   final void Function(int tabIndex) onNavigateToTab;
+
+  int get _pendingShoppingItemsCount =>
+      shoppingItemsCount - checkedShoppingItemsCount;
 
   @override
   Widget build(BuildContext context) {
@@ -45,6 +73,12 @@ class _HomeContent extends StatelessWidget {
     final stats = FridgeStats.fromItems(foods);
     final recipeCount = RecipeCatalog.suggestFor(foods).length;
     final expiringSoonFoods = _expiringSoonFoods(foods);
+    final smartActions = _buildSmartActions(
+      context: context,
+      stats: stats,
+      recipeCount: recipeCount,
+      expiringSoonFoods: expiringSoonFoods,
+    );
 
     return Scaffold(
       backgroundColor: colorScheme.surfaceContainerLowest,
@@ -67,7 +101,7 @@ class _HomeContent extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Voici le résumé de ton frigo aujourd’hui.',
+            'Ton assistant anti-gaspi te résume les actions utiles du moment.',
             style: theme.textTheme.bodyLarge?.copyWith(
               color: colorScheme.onSurfaceVariant,
             ),
@@ -77,14 +111,23 @@ class _HomeContent extends StatelessWidget {
             totalFoods: stats.total,
             expiringSoon: stats.expiringSoon,
             recipeCount: recipeCount,
+            shoppingCount: _pendingShoppingItemsCount,
           ),
-          const SizedBox(height: 28),
-          Text(
-            'Actions rapides',
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-              letterSpacing: -0.2,
+          if (smartActions.isNotEmpty) ...[
+            const SizedBox(height: 28),
+            _SectionHeader(
+              title: 'À faire maintenant',
+              actionLabel: null,
+              onActionTap: null,
             ),
+            const SizedBox(height: 12),
+            ...smartActions,
+          ],
+          const SizedBox(height: 28),
+          _SectionHeader(
+            title: 'Actions rapides',
+            actionLabel: null,
+            onActionTap: null,
           ),
           const SizedBox(height: 12),
           _QuickActionCard(
@@ -106,22 +149,10 @@ class _HomeContent extends StatelessWidget {
           ),
           if (expiringSoonFoods.isNotEmpty) ...[
             const SizedBox(height: 28),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'À consommer bientôt',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.2,
-                    ),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () => onNavigateToTab(HomeScreen.fridgeTabIndex),
-                  child: const Text('Voir tout'),
-                ),
-              ],
+            _SectionHeader(
+              title: 'À consommer bientôt',
+              actionLabel: 'Voir tout',
+              onActionTap: () => onNavigateToTab(HomeScreen.fridgeTabIndex),
             ),
             const SizedBox(height: 8),
             ...expiringSoonFoods.map(
@@ -134,6 +165,97 @@ class _HomeContent extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  List<Widget> _buildSmartActions({
+    required BuildContext context,
+    required FridgeStats stats,
+    required int recipeCount,
+    required List<FoodItem> expiringSoonFoods,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final actions = <Widget>[];
+
+    if (stats.expired > 0) {
+      actions.add(
+        _SmartActionCard(
+          icon: Icons.error_outline_rounded,
+          title: '${stats.expired} aliment${stats.expired > 1 ? 's' : ''} expiré${stats.expired > 1 ? 's' : ''}',
+          subtitle: 'Vérifie ton frigo et retire ce qui n’est plus bon.',
+          color: colorScheme.error,
+          onTap: () => onNavigateToTab(HomeScreen.fridgeTabIndex),
+        ),
+      );
+    } else if (stats.expiringSoon > 0) {
+      actions.add(
+        _SmartActionCard(
+          icon: Icons.schedule_rounded,
+          title: '${stats.expiringSoon} aliment${stats.expiringSoon > 1 ? 's' : ''} à consommer vite',
+          subtitle: expiringSoonFoods.isEmpty
+              ? 'Va voir ce qui approche de la date limite.'
+              : 'Priorité : ${expiringSoonFoods.first.name}.',
+          color: const Color(0xFFFB8C00),
+          onTap: () => onNavigateToTab(HomeScreen.fridgeTabIndex),
+        ),
+      );
+    }
+
+    if (recipeCount > 0) {
+      actions.add(
+        _SmartActionCard(
+          icon: Icons.restaurant_menu_rounded,
+          title: '$recipeCount recette${recipeCount > 1 ? 's' : ''} possible${recipeCount > 1 ? 's' : ''}',
+          subtitle: 'Cuisine avec ce que tu as déjà dans ton frigo.',
+          color: const Color(0xFF43A047),
+          onTap: () => onNavigateToTab(HomeScreen.recipesTabIndex),
+        ),
+      );
+    }
+
+    if (_pendingShoppingItemsCount > 0) {
+      actions.add(
+        _SmartActionCard(
+          icon: Icons.shopping_cart_rounded,
+          title: '$_pendingShoppingItemsCount article${_pendingShoppingItemsCount > 1 ? 's' : ''} à acheter',
+          subtitle: checkedShoppingItemsCount > 0
+              ? '$checkedShoppingItemsCount déjà coché${checkedShoppingItemsCount > 1 ? 's' : ''}.'
+              : 'Complète ta liste avant les courses.',
+          color: colorScheme.primary,
+          onTap: () => onNavigateToTab(HomeScreen.shoppingTabIndex),
+        ),
+      );
+    }
+
+    if (latestScan != null) {
+      actions.add(
+        _SmartActionCard(
+          icon: Icons.receipt_long_rounded,
+          title: 'Dernier scan ${_relativeScanLabel(latestScan!.scannedAt)}',
+          subtitle: latestScan!.summary,
+          color: const Color(0xFF6D4C41),
+          onTap: () => onNavigateToTab(HomeScreen.scanTabIndex),
+        ),
+      );
+    }
+
+    if (actions.isEmpty) {
+      actions.add(
+        _SmartActionCard(
+          icon: Icons.document_scanner_outlined,
+          title: 'Commence par scanner un ticket',
+          subtitle: 'Ajoute rapidement les produits de tes dernières courses.',
+          color: const Color(0xFF00897B),
+          onTap: () => onNavigateToTab(HomeScreen.scanTabIndex),
+        ),
+      );
+    }
+
+    return [
+      for (final action in actions.take(4)) ...[
+        action,
+        const SizedBox(height: 12),
+      ],
+    ];
   }
 
   List<FoodItem> _expiringSoonFoods(List<FoodItem> items) {
@@ -149,6 +271,57 @@ class _HomeContent extends StatelessWidget {
 
     return urgent.take(4).toList();
   }
+
+  String _relativeScanLabel(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final scanDay = DateTime(date.year, date.month, date.day);
+    final hour = date.hour.toString().padLeft(2, '0');
+    final minute = date.minute.toString().padLeft(2, '0');
+
+    if (scanDay == today) return 'aujourd’hui à $hour:$minute';
+    if (scanDay == today.subtract(const Duration(days: 1))) {
+      return 'hier à $hour:$minute';
+    }
+
+    return 'le ${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')} à $hour:$minute';
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({
+    required this.title,
+    required this.actionLabel,
+    required this.onActionTap,
+  });
+
+  final String title;
+  final String? actionLabel;
+  final VoidCallback? onActionTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            title,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.2,
+            ),
+          ),
+        ),
+        if (actionLabel != null)
+          TextButton(
+            onPressed: onActionTap,
+            child: Text(actionLabel!),
+          ),
+      ],
+    );
+  }
 }
 
 class _SummaryStatsCard extends StatelessWidget {
@@ -156,16 +329,17 @@ class _SummaryStatsCard extends StatelessWidget {
     required this.totalFoods,
     required this.expiringSoon,
     required this.recipeCount,
+    required this.shoppingCount,
   });
 
   final int totalFoods;
   final int expiringSoon;
   final int recipeCount;
+  final int shoppingCount;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 8),
@@ -208,6 +382,15 @@ class _SummaryStatsCard extends StatelessWidget {
               color: const Color(0xFF43A047),
             ),
           ),
+          _HomeDivider(color: colorScheme.outlineVariant),
+          Expanded(
+            child: _StatColumn(
+              icon: Icons.shopping_cart_outlined,
+              value: shoppingCount.toString(),
+              label: 'Courses',
+              color: const Color(0xFF7E57C2),
+            ),
+          ),
         ],
       ),
     );
@@ -234,11 +417,11 @@ class _StatColumn extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, color: color, size: 22),
+        Icon(icon, color: color, size: 21),
         const SizedBox(height: 8),
         Text(
           value,
-          style: theme.textTheme.headlineSmall?.copyWith(
+          style: theme.textTheme.titleLarge?.copyWith(
             fontWeight: FontWeight.w800,
             color: color,
             height: 1,
@@ -247,6 +430,8 @@ class _StatColumn extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
             fontWeight: FontWeight.w500,
@@ -268,6 +453,87 @@ class _HomeDivider extends StatelessWidget {
       width: 1,
       height: 48,
       color: color.withValues(alpha: 0.6),
+    );
+  }
+}
+
+class _SmartActionCard extends StatelessWidget {
+  const _SmartActionCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.color,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Material(
+      color: color.withValues(alpha: 0.08),
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: color.withValues(alpha: 0.18)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(icon, color: color),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.1,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 16,
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
