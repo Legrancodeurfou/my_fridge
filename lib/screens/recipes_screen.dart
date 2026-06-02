@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../data/favorite_recipes_store.dart';
 import '../data/fridge_store.dart';
 import '../data/profile_store.dart';
 import '../data/shopping_list_store.dart';
@@ -12,20 +13,23 @@ class RecipesScreen extends StatelessWidget {
     required this.store,
     required this.profileStore,
     required this.shoppingListStore,
+    required this.favoriteRecipesStore,
   });
 
   final FridgeStore store;
   final ProfileStore profileStore;
   final ShoppingListStore shoppingListStore;
+  final FavoriteRecipesStore favoriteRecipesStore;
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: Listenable.merge([store, profileStore, shoppingListStore]),
+      listenable: Listenable.merge([store, profileStore, shoppingListStore, favoriteRecipesStore]),
       builder: (context, _) => _RecipesContent(
         store: store,
         profileStore: profileStore,
         shoppingListStore: shoppingListStore,
+        favoriteRecipesStore: favoriteRecipesStore,
       ),
     );
   }
@@ -36,11 +40,13 @@ class _RecipesContent extends StatelessWidget {
     required this.store,
     required this.profileStore,
     required this.shoppingListStore,
+    required this.favoriteRecipesStore,
   });
 
   final FridgeStore store;
   final ProfileStore profileStore;
   final ShoppingListStore shoppingListStore;
+  final FavoriteRecipesStore favoriteRecipesStore;
 
   @override
   Widget build(BuildContext context) {
@@ -49,6 +55,9 @@ class _RecipesContent extends StatelessWidget {
     final foods = store.foods;
     final profile = profileStore.profile;
     final recipes = RecipeCatalog.suggestFor(foods, profile: profile);
+    final favoriteRecipes = RecipeCatalog.favoriteRecipesFor(
+      favoriteRecipesStore.favoriteNames,
+    );
 
     return Scaffold(
       backgroundColor: colorScheme.surfaceContainerLowest,
@@ -59,44 +68,78 @@ class _RecipesContent extends StatelessWidget {
         scrolledUnderElevation: 0,
         backgroundColor: colorScheme.surfaceContainerLowest,
       ),
-      body: foods.isEmpty
+      body: foods.isEmpty && favoriteRecipes.isEmpty
           ? const _EmptyRecipesView()
-          : recipes.isEmpty
-              ? const _NoMatchingRecipesView()
-              : ListView(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-                  children: [
-                    Text(
-                      'Idées avec ton frigo',
-                      style: theme.textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.3,
+          : ListView(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+              children: [
+                if (favoriteRecipes.isNotEmpty) ...[
+                  Text(
+                    'Mes recettes favorites',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Tes recettes gardées de côté, même si des ingrédients manquent.',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  ...favoriteRecipes.map(
+                    (recipe) => Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _RecipeCard(
+                        recipe: recipe,
+                        store: store,
+                        shoppingListStore: shoppingListStore,
+                        favoriteRecipesStore: favoriteRecipesStore,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '${recipes.length} recette${recipes.length > 1 ? 's' : ''} '
-                      'basée${recipes.length > 1 ? 's' : ''} sur '
-                      '${foods.length} aliment${foods.length > 1 ? 's' : ''}',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                if (foods.isEmpty)
+                  const _EmptyRecipesView(compact: true)
+                else if (recipes.isEmpty)
+                  const _NoMatchingRecipesView(compact: true)
+                else ...[
+                  Text(
+                    'Idées avec ton frigo',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '${recipes.length} recette${recipes.length > 1 ? 's' : ''} '
+                    'basée${recipes.length > 1 ? 's' : ''} sur '
+                    '${foods.length} aliment${foods.length > 1 ? 's' : ''}',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _ProfileRecipeBanner(profile: profile),
+                  const SizedBox(height: 20),
+                  ...recipes.map(
+                    (recipe) => Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _RecipeCard(
+                        recipe: recipe,
+                        store: store,
+                        shoppingListStore: shoppingListStore,
+                        favoriteRecipesStore: favoriteRecipesStore,
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    _ProfileRecipeBanner(profile: profile),
-                    const SizedBox(height: 20),
-                    ...recipes.map(
-                      (recipe) => Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: _RecipeCard(
-                          recipe: recipe,
-                          store: store,
-                          shoppingListStore: shoppingListStore,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
+              ],
+            ),
     );
   }
 }
@@ -218,6 +261,44 @@ abstract final class RecipeCatalog {
     if (foods.isEmpty) return [];
 
     final names = foods.map((food) => food.name.toLowerCase()).toList();
+    final recipes = _candidateRecipesForNames(names);
+
+    final filtered = _filterForProfile(recipes, profile);
+    final sorted = _sortForProfile(filtered, profile, foods);
+
+    return sorted.take(5).toList();
+  }
+
+  static List<RecipeSuggestion> favoriteRecipesFor(List<String> favoriteNames) {
+    if (favoriteNames.isEmpty) return [];
+
+    final wanted = favoriteNames.toSet();
+    return _allRecipes()
+        .where((recipe) => wanted.contains(recipe.name))
+        .toList();
+  }
+
+  static List<RecipeSuggestion> _allRecipes() {
+    return _candidateRecipesForNames(const [
+      'pâtes',
+      'jambon',
+      'salade',
+      'œufs',
+      'tomates',
+      'lait',
+      'yaourt',
+      'steak',
+      'riz',
+      'poulet',
+      'courgettes',
+      'pain',
+      'mozzarella',
+      'tortillas',
+      'avocat',
+    ]);
+  }
+
+  static List<RecipeSuggestion> _candidateRecipesForNames(List<String> names) {
     final recipes = <RecipeSuggestion>[];
 
     void addIf(bool condition, RecipeSuggestion recipe) {
@@ -676,11 +757,9 @@ abstract final class RecipeCatalog {
     );
 
 
-    final filtered = _filterForProfile(recipes, profile);
-    final sorted = _sortForProfile(filtered, profile, foods);
-
-    return sorted.take(5).toList();
+    return recipes;
   }
+
 
   static List<RecipeIngredientMatch> matchIngredients(
     RecipeSuggestion recipe,
@@ -897,11 +976,13 @@ class _RecipeCard extends StatelessWidget {
     required this.recipe,
     required this.store,
     required this.shoppingListStore,
+    required this.favoriteRecipesStore,
   });
 
   final RecipeSuggestion recipe;
   final FridgeStore store;
   final ShoppingListStore shoppingListStore;
+  final FavoriteRecipesStore favoriteRecipesStore;
 
   void _showRecipeDetails(BuildContext context) {
     showModalBottomSheet<void>(
@@ -913,6 +994,7 @@ class _RecipeCard extends StatelessWidget {
           recipe: recipe,
           store: store,
           shoppingListStore: shoppingListStore,
+          favoriteRecipesStore: favoriteRecipesStore,
         );
       },
     );
@@ -925,6 +1007,7 @@ class _RecipeCard extends StatelessWidget {
     final foods = store.foods;
     final matches = RecipeCatalog.matchIngredients(recipe, foods);
     final availableCount = matches.where((item) => item.isAvailable).length;
+    final isFavorite = favoriteRecipesStore.isFavorite(recipe.name);
 
     return Material(
       color: colorScheme.surface,
@@ -1017,6 +1100,22 @@ class _RecipeCard extends StatelessWidget {
                             color: colorScheme.onSurfaceVariant,
                             fontWeight: FontWeight.w600,
                           ),
+                        ),
+                        const SizedBox(width: 4),
+                        IconButton(
+                          tooltip: isFavorite
+                              ? 'Retirer des favoris'
+                              : 'Ajouter aux favoris',
+                          visualDensity: VisualDensity.compact,
+                          icon: Icon(
+                            isFavorite
+                                ? Icons.favorite_rounded
+                                : Icons.favorite_border_rounded,
+                            color: isFavorite
+                                ? const Color(0xFFE53935)
+                                : colorScheme.onSurfaceVariant,
+                          ),
+                          onPressed: () => favoriteRecipesStore.toggleFavorite(recipe.name),
                         ),
                       ],
                     ),
@@ -1116,11 +1215,13 @@ class _RecipeDetailSheet extends StatelessWidget {
     required this.recipe,
     required this.store,
     required this.shoppingListStore,
+    required this.favoriteRecipesStore,
   });
 
   final RecipeSuggestion recipe;
   final FridgeStore store;
   final ShoppingListStore shoppingListStore;
+  final FavoriteRecipesStore favoriteRecipesStore;
 
   void _addMissingToShoppingList(BuildContext context) {
     final missingItems = RecipeCatalog.missingShoppingItems(recipe, store.foods);
@@ -1225,6 +1326,7 @@ class _RecipeDetailSheet extends StatelessWidget {
     final matches = RecipeCatalog.matchIngredients(recipe, foods);
     final available = matches.where((item) => item.isAvailable).toList();
     final missing = matches.where((item) => !item.isAvailable).toList();
+    final isFavorite = favoriteRecipesStore.isFavorite(recipe.name);
 
     return Container(
       constraints: BoxConstraints(
@@ -1309,6 +1411,20 @@ class _RecipeDetailSheet extends StatelessWidget {
                               ),
                             ],
                           ),
+                        ),
+                        IconButton(
+                          tooltip: isFavorite
+                              ? 'Retirer des favoris'
+                              : 'Ajouter aux favoris',
+                          icon: Icon(
+                            isFavorite
+                                ? Icons.favorite_rounded
+                                : Icons.favorite_border_rounded,
+                            color: isFavorite
+                                ? const Color(0xFFE53935)
+                                : colorScheme.onSurfaceVariant,
+                          ),
+                          onPressed: () => favoriteRecipesStore.toggleFavorite(recipe.name),
                         ),
                       ],
                     ),
@@ -1474,7 +1590,9 @@ class _RecipeStepTile extends StatelessWidget {
 }
 
 class _EmptyRecipesView extends StatelessWidget {
-  const _EmptyRecipesView();
+  const _EmptyRecipesView({this.compact = false});
+
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -1524,7 +1642,9 @@ class _EmptyRecipesView extends StatelessWidget {
 }
 
 class _NoMatchingRecipesView extends StatelessWidget {
-  const _NoMatchingRecipesView();
+  const _NoMatchingRecipesView({this.compact = false});
+
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {

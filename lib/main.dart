@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'data/favorite_recipes_store.dart';
 import 'data/fridge_store.dart';
 import 'data/profile_store.dart';
 import 'data/scan_history_store.dart';
@@ -54,12 +55,14 @@ class _AppStores {
     required this.profileStore,
     required this.shoppingListStore,
     required this.scanHistoryStore,
+    required this.favoriteRecipesStore,
   });
 
   final FridgeStore fridgeStore;
   final ProfileStore profileStore;
   final ShoppingListStore shoppingListStore;
   final ScanHistoryStore scanHistoryStore;
+  final FavoriteRecipesStore favoriteRecipesStore;
 
   static Future<_AppStores> load() async {
     final results = await Future.wait([
@@ -67,6 +70,7 @@ class _AppStores {
       ProfileStore.load(),
       ShoppingListStore.load(),
       ScanHistoryStore.load(),
+      FavoriteRecipesStore.load(),
     ]);
 
     return _AppStores(
@@ -74,6 +78,7 @@ class _AppStores {
       profileStore: results[1] as ProfileStore,
       shoppingListStore: results[2] as ShoppingListStore,
       scanHistoryStore: results[3] as ScanHistoryStore,
+      favoriteRecipesStore: results[4] as FavoriteRecipesStore,
     );
   }
 
@@ -82,6 +87,7 @@ class _AppStores {
     profileStore.dispose();
     shoppingListStore.dispose();
     scanHistoryStore.dispose();
+    favoriteRecipesStore.dispose();
   }
 }
 
@@ -151,6 +157,7 @@ class _MainNavigationState extends State<MainNavigation> {
     final profileStore = widget.stores.profileStore;
     final shoppingListStore = widget.stores.shoppingListStore;
     final scanHistoryStore = widget.stores.scanHistoryStore;
+    final favoriteRecipesStore = widget.stores.favoriteRecipesStore;
 
     final screens = [
       HomeScreen(
@@ -172,6 +179,7 @@ class _MainNavigationState extends State<MainNavigation> {
         store: fridgeStore,
         profileStore: profileStore,
         shoppingListStore: shoppingListStore,
+        favoriteRecipesStore: favoriteRecipesStore,
       ),
       ShoppingListScreen(
         shoppingStore: shoppingListStore,
