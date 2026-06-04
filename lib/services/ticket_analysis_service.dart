@@ -3,18 +3,64 @@ import 'dart:typed_data';
 
 import '../models/detected_product_draft.dart';
 import '../models/ticket_analysis_result.dart';
+import 'ticket_analysis_prompt.dart';
+
+enum TicketAnalysisMode { demo, gemini }
 
 /// Analyse d’image de ticket de caisse.
 ///
-/// Version MVP actuelle : simulation sans IA.
-/// Chaque scan renvoie un ticket fictif différent pour tester l’app.
+/// État actuel :
+/// - mode démo actif par défaut pour ne rien casser ;
+/// - prompt Gemini préparé ;
+/// - futur branchement IA isolé dans [_analyzeWithGemini].
 class TicketAnalysisService {
-  const TicketAnalysisService();
+  const TicketAnalysisService({
+    this.mode = TicketAnalysisMode.demo,
+  });
+
+  final TicketAnalysisMode mode;
 
   /// Analyse l’image et renvoie les produits à valider.
-  ///
-  /// [imageBytes] sera envoyé à l’IA plus tard ; ignoré pour la simulation.
   Future<List<DetectedProductDraft>> analyzeTicket(Uint8List imageBytes) async {
+    return switch (mode) {
+      TicketAnalysisMode.demo => _analyzeWithDemo(imageBytes),
+      TicketAnalysisMode.gemini => _analyzeWithGemini(imageBytes),
+    };
+  }
+
+  /// Mode actuel de l’app : simulation locale sans IA.
+  Future<List<DetectedProductDraft>> _analyzeWithDemo(Uint8List imageBytes) async {
+    await Future<void>.delayed(const Duration(seconds: 2));
+    return _simulateAnalysis(imageBytes).products;
+  }
+
+  /// Futur mode Gemini.
+  ///
+  /// Important : ne mets pas de clé API Gemini directement dans Flutter.
+  /// La prochaine étape propre sera :
+  /// Flutter -> backend sécurisé -> Gemini API -> JSON -> Flutter.
+  ///
+  /// Pour l’instant, cette méthode prépare le prompt et garde un fallback démo,
+  /// afin que l’app reste utilisable même sans backend ni clé API.
+  Future<List<DetectedProductDraft>> _analyzeWithGemini(Uint8List imageBytes) async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    // Prêt pour l’appel backend/Gemini :
+    // - modèle cible : TicketAnalysisPrompt.geminiModel
+    // - prompt : prompt
+    // - image : imageBytes
+    final prompt = TicketAnalysisPrompt.build(today: today);
+
+    // Évite les warnings d’analyse tant que l’appel IA n’est pas branché.
+    // ignore: unused_local_variable
+    final geminiRequestPreview = {
+      'model': TicketAnalysisPrompt.geminiModel,
+      'prompt': prompt,
+      'imageBytesLength': imageBytes.length,
+    };
+
+    // Fallback temporaire : on conserve exactement le comportement actuel.
     await Future<void>.delayed(const Duration(seconds: 2));
     return _simulateAnalysis(imageBytes).products;
   }
@@ -38,7 +84,7 @@ class TicketAnalysisService {
 
   /// Plusieurs tickets fictifs pour rendre la démo moins répétitive.
   ///
-  /// Format volontairement proche d’une future réponse IA :
+  /// Format proche d’une future réponse IA :
   /// name, quantity, amount, unit, category, estimatedExpirationDate.
   static List<List<Map<String, dynamic>>> _mockTickets(DateTime today) {
     return [
