@@ -11,6 +11,7 @@ Ignore toujours :
 - remises, promotions, fidélité, coupons
 - sacs, emballages, services, frais
 - numéro de ticket, magasin, adresse, horaires
+- produits clairement non alimentaires
 
 Retourne uniquement un JSON strict, sans Markdown, sans explication, sans texte avant ou après.
 
@@ -19,21 +20,30 @@ Format exact attendu :
   {
     "name": "Nom simple du produit",
     "quantity": 1,
-    "amount": 500,
-    "unit": "g",
+    "amount": 1,
+    "unit": "unité",
     "category": "other",
     "estimatedShelfLifeDays": 30
   }
 ]
 
-Règles importantes :
+Unités autorisées uniquement : "g", "kg", "ml", "cl", "l", "unité", "tranche".
+Catégories autorisées uniquement : "dairy", "produce", "meat", "other".
+
+Règles très importantes :
+- N'invente jamais un poids, un volume ou un nombre de tranches si l'information n'est pas clairement visible sur le ticket.
+- Si le poids, le volume ou le nombre précis n'est pas visible, retourne simplement : quantity = 1, amount = 1, unit = "unité".
+- Pour les produits comme pâtes, riz, biscuits, chocolat, conserve, sauce, pain, fromage emballé : si le poids n'est pas visible, mets 1 unité. Ne mets pas 500 g par défaut.
+- Pour les produits naturellement comptables, garde le nombre uniquement s'il est visible ou clairement indiqué : œufs, yaourts, fruits, légumes, tranches de jambon, tranches de pain.
+- Exemple : "Jambon 6 tranches" visible => quantity = 6, amount = 6, unit = "tranche".
+- Exemple : "Jambon" sans nombre visible => quantity = 1, amount = 1, unit = "unité".
+- Exemple : "Riz" sans poids visible => quantity = 1, amount = 1, unit = "unité".
+- Exemple : "Pâtes" sans poids visible => quantity = 1, amount = 1, unit = "unité".
+- Exemple : "Lait 1L" visible => quantity = 1, amount = 1, unit = "l".
 - "name" doit être lisible et simple en français. Exemple : "Crème fraîche" au lieu de "CREME FR 30%".
 - "quantity" = nombre d'unités logiques. Exemple : 6 œufs => 6, 500 g de pâtes => 1.
 - "amount" = quantité affichable. Exemple : 500 pour 500 g, 20 pour 20 cl, 6 pour 6 œufs.
-- "unit" doit être une seule des valeurs suivantes : "g", "kg", "ml", "cl", "l", "unité", "tranche".
-- "category" doit être une seule des valeurs suivantes : "dairy", "produce", "meat", "other".
 - "estimatedShelfLifeDays" doit être un nombre entier réaliste selon le produit.
-- Si une information est incertaine, fais une estimation raisonnable.
 - Si aucun produit alimentaire n'est détecté, retourne [].
 `;
 
@@ -123,7 +133,7 @@ async function callGemini({ apiKey, imageBase64, mimeType }) {
         },
       ],
       generationConfig: {
-        temperature: 0.1,
+        temperature: 0,
         response_mime_type: 'application/json',
       },
     }),
@@ -176,16 +186,42 @@ function normalizeProducts(rawProducts) {
 }
 
 function normalizeProduct(raw, today) {
-  const name = cleanString(raw.name);
+  const name = cleanProductName(raw.name);
   if (!name) return null;
 
-  const unit = normalizeUnit(raw.unit);
-  const amount = toPositiveNumber(raw.amount, toPositiveNumber(raw.quantity, 1));
-  const quantity = normalizeQuantity(raw.quantity, amount, unit);
+  const unitInfo = normalizeUnit(raw.unit);
+  const hasUsableAmount = hasPositiveNumber(raw.amount);
+  const hasUsableQuantity = hasPositiveNumber(raw.quantity);
+  const rawAmount = Number(raw.amount);
+  const rawQuantity = Number(raw.quantity);
+
+  let unit = unitInfo.unit;
+  let amount;
+  let quantity;
+
+  // Si Gemini n'a pas fourni d'unité reconnue ou n'a pas fourni de quantité
+  // affichable claire, on évite d'inventer un poids/volume.
+  if (!unitInfo.isRecognized || !hasUsableAmount) {
+    unit = 'unité';
+    amount = hasUsableQuantity ? Math.max(1, Math.round(rawQuantity)) : 1;
+    quantity = Math.max(1, Math.round(amount));
+  } else {
+    amount = rawAmount;
+    quantity = normalizeQuantity(raw.quantity, amount, unit);
+  }
+
+  // Dernier garde-fou : pas de valeurs absurdes en unités ou tranches.
+  if ((unit === 'unité' || unit === 'tranche') && amount > 99) {
+    amount = 1;
+    quantity = 1;
+    unit = 'unité';
+  }
+
   const category = normalizeCategory(raw.category);
   const shelfLifeDays = normalizeShelfLifeDays(
     raw.estimatedShelfLifeDays,
     category,
+    name,
   );
 
   const expirationDate = new Date(today);
@@ -201,14 +237,26 @@ function normalizeProduct(raw, today) {
   };
 }
 
+function cleanProductName(value) {
+  const name = cleanString(value)
+    .replace(/\s+/g, ' ')
+    .replace(/\b(x|X)\s?\d+\b/g, '')
+    .replace(/\b\d+[,.]?\d*\s?(g|kg|ml|cl|l)\b/gi, '')
+    .trim();
+
+  if (!name || name.length < 2) return '';
+
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
 function cleanString(value) {
   if (typeof value !== 'string') return '';
   return value.trim().replace(/\s+/g, ' ');
 }
 
-function toPositiveNumber(value, fallback) {
+function hasPositiveNumber(value) {
   const number = Number(value);
-  return Number.isFinite(number) && number > 0 ? number : fallback;
+  return Number.isFinite(number) && number > 0;
 }
 
 function normalizeQuantity(value, amount, unit) {
@@ -228,17 +276,17 @@ function normalizeQuantity(value, amount, unit) {
 function normalizeUnit(value) {
   const raw = cleanString(value).toLowerCase();
 
-  if (['g', 'gramme', 'grammes'].includes(raw)) return 'g';
-  if (['kg', 'kilo', 'kilos', 'kilogramme', 'kilogrammes'].includes(raw)) return 'kg';
-  if (['ml', 'millilitre', 'millilitres'].includes(raw)) return 'ml';
-  if (['cl', 'centilitre', 'centilitres'].includes(raw)) return 'cl';
-  if (['l', 'litre', 'litres'].includes(raw)) return 'l';
-  if (['tranche', 'tranches'].includes(raw)) return 'tranche';
-  if (['unité', 'unites', 'unités', 'piece', 'pièce', 'pieces', 'pièces'].includes(raw)) {
-    return 'unité';
+  if (['g', 'gramme', 'grammes'].includes(raw)) return { unit: 'g', isRecognized: true };
+  if (['kg', 'kilo', 'kilos', 'kilogramme', 'kilogrammes'].includes(raw)) return { unit: 'kg', isRecognized: true };
+  if (['ml', 'millilitre', 'millilitres'].includes(raw)) return { unit: 'ml', isRecognized: true };
+  if (['cl', 'centilitre', 'centilitres'].includes(raw)) return { unit: 'cl', isRecognized: true };
+  if (['l', 'litre', 'litres'].includes(raw)) return { unit: 'l', isRecognized: true };
+  if (['tranche', 'tranches'].includes(raw)) return { unit: 'tranche', isRecognized: true };
+  if (['unité', 'unites', 'unités', 'unite', 'pièce', 'piece', 'pièces', 'pieces'].includes(raw)) {
+    return { unit: 'unité', isRecognized: true };
   }
 
-  return 'unité';
+  return { unit: 'unité', isRecognized: false };
 }
 
 function normalizeCategory(value) {
@@ -247,12 +295,20 @@ function normalizeCategory(value) {
   return allowed.has(raw) ? raw : 'other';
 }
 
-function normalizeShelfLifeDays(value, category) {
+function normalizeShelfLifeDays(value, category, name) {
   const number = Number(value);
 
   if (Number.isFinite(number) && number >= 1 && number <= 730) {
     return Math.round(number);
   }
+
+  const lowerName = name.toLowerCase();
+
+  if (lowerName.includes('viande') || lowerName.includes('poulet') || lowerName.includes('steak') || lowerName.includes('jambon')) return 3;
+  if (lowerName.includes('salade') || lowerName.includes('tomate') || lowerName.includes('courgette') || lowerName.includes('avocat')) return 5;
+  if (lowerName.includes('lait') || lowerName.includes('yaourt') || lowerName.includes('crème') || lowerName.includes('fromage') || lowerName.includes('mozzarella')) return 10;
+  if (lowerName.includes('pain') || lowerName.includes('baguette')) return 4;
+  if (lowerName.includes('œuf') || lowerName.includes('oeuf')) return 14;
 
   if (category === 'meat') return 3;
   if (category === 'produce') return 5;
