@@ -12,9 +12,13 @@ import 'screens/profile_screen.dart';
 import 'screens/recipes_screen.dart';
 import 'screens/scan_screen.dart';
 import 'screens/shopping_list_screen.dart';
+import 'services/supabase_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await SupabaseService.initializeIfConfigured();
+
   runApp(const MyApp());
 }
 
@@ -148,7 +152,6 @@ class _MainNavigationState extends State<MainNavigation> {
   void _goToTab(int index) {
     setState(() => _selectedIndex = index);
   }
-
 
   Future<void> _resetDemoData() async {
     widget.stores.fridgeStore.resetDemoData();
