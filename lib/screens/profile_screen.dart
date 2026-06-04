@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 
 import '../data/profile_store.dart';
+import '../services/auth_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({
     super.key,
     required this.store,
+    required this.authService,
     required this.onResetDemoData,
   });
 
   final ProfileStore store;
+  final AuthService authService;
   final Future<void> Function() onResetDemoData;
 
   @override
@@ -38,6 +41,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
     widget.store.updateName(_nameController.text);
   }
 
+
+  Future<void> _signInWithGoogle() async {
+    try {
+      await widget.authService.signInWithGoogle();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          content: Text(widget.authService.errorMessage ?? 'Connexion Google impossible'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _signOut() async {
+    await widget.authService.signOut();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        content: const Text('Déconnecté'),
+      ),
+    );
+  }
 
   Future<void> _confirmResetDemoData() async {
     final confirmed = await showDialog<bool>(
@@ -79,7 +109,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: widget.store,
+      listenable: Listenable.merge([widget.store, widget.authService]),
       builder: (context, _) {
         final profile = widget.store.profile;
         final colorScheme = Theme.of(context).colorScheme;
@@ -105,6 +135,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
             children: [
               _HeaderCard(nameController: _nameController),
               const SizedBox(height: 16),
+              const _SectionTitle(title: 'Compte'),
+              const SizedBox(height: 8),
+              _AuthCard(
+                authService: widget.authService,
+                onSignIn: _signInWithGoogle,
+                onSignOut: _signOut,
+              ),
+              const SizedBox(height: 24),
               const _SectionTitle(title: 'Préférences'),
               const SizedBox(height: 8),
               _DropdownCard<CookingLevel>(
@@ -166,7 +204,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const _InfoCard(
                 icon: Icons.info_outline_rounded,
                 title: 'Version MVP',
-                subtitle: 'My Fridge MVP v0.2',
+                subtitle: 'My Fridge MVP v0.1',
               ),
             ],
           ),
@@ -316,6 +354,172 @@ class _SwitchCard extends StatelessWidget {
         contentPadding: EdgeInsets.zero,
         secondary: Icon(icon, color: colorScheme.primary),
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+      ),
+    );
+  }
+}
+
+
+class _AuthCard extends StatelessWidget {
+  const _AuthCard({
+    required this.authService,
+    required this.onSignIn,
+    required this.onSignOut,
+  });
+
+  final AuthService authService;
+  final VoidCallback onSignIn;
+  final VoidCallback onSignOut;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    if (!authService.isAvailable) {
+      return _CardContainer(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.cloud_off_rounded, color: colorScheme.onSurfaceVariant),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Cloud non configuré',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Supabase n’est pas encore disponible sur cette version de l’app.',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (authService.isSignedIn) {
+      return _CardContainer(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.verified_user_rounded, color: colorScheme.primary),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Connecté',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          authService.email ?? 'Compte Supabase connecté',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: authService.isBusy ? null : onSignOut,
+                  icon: const Icon(Icons.logout_rounded),
+                  label: const Text('Se déconnecter'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return _CardContainer(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.cloud_done_rounded, color: colorScheme.primary),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Sauvegarde cloud',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Connecte-toi pour préparer la sauvegarde de ton frigo sur Supabase.',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (authService.errorMessage != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                authService.errorMessage!,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.error,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: authService.isBusy ? null : onSignIn,
+                icon: authService.isBusy
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.login_rounded),
+                label: const Text('Se connecter avec Google'),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
