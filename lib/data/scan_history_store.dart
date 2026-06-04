@@ -42,6 +42,9 @@ class ScanHistoryStore extends ChangeNotifier {
   void addScan({
     required int detectedCount,
     required List<FoodItem> validatedFoods,
+    String source = 'unknown',
+    String? model,
+    String? errorMessage,
   }) {
     final now = DateTime.now();
 
@@ -51,6 +54,9 @@ class ScanHistoryStore extends ChangeNotifier {
       detectedCount: detectedCount,
       validatedCount: validatedFoods.length,
       products: validatedFoods.map(ScanHistoryProduct.fromFood).toList(),
+      source: source,
+      model: model,
+      errorMessage: errorMessage,
     );
 
     _items = [item, ..._items].take(_maxItems).toList();

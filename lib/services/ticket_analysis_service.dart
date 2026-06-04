@@ -15,11 +15,40 @@ import 'ticket_analysis_http_client.dart';
 ///   mode demo si l'appel échoue.
 enum TicketAnalysisMode { demo, gemini }
 
+enum TicketAnalysisSource { demo, gemini }
+
+class TicketAnalysisReport {
+  const TicketAnalysisReport({
+    required this.products,
+    required this.source,
+    this.model,
+    this.errorMessage,
+  });
+
+  final List<DetectedProductDraft> products;
+  final TicketAnalysisSource source;
+  final String? model;
+  final String? errorMessage;
+
+  bool get usedGemini => source == TicketAnalysisSource.gemini;
+  bool get usedFallback => source == TicketAnalysisSource.demo && errorMessage != null;
+
+  String get sourceLabel {
+    return switch (source) {
+      TicketAnalysisSource.gemini => 'Gemini',
+      TicketAnalysisSource.demo => 'Mode démo',
+    };
+  }
+}
+
 /// Analyse d'image de ticket de caisse.
 ///
 /// Version actuelle : hybride.
-/// 1. Essaie Gemini via une Netlify Function.
-/// 2. Si l'API n'est pas configurée, indisponible ou invalide, garde le mode démo.
+/// 1. En mode gemini, essaie Gemini via une Netlify Function.
+/// 2. En mode demo, utilise les tickets fictifs.
+///
+/// Important : en mode gemini, on ne retombe plus silencieusement sur des
+/// produits fictifs. Si Gemini échoue, l'erreur est affichée côté UI.
 class TicketAnalysisService {
   const TicketAnalysisService({
     this.mode = TicketAnalysisMode.gemini,
@@ -31,26 +60,39 @@ class TicketAnalysisService {
   final TicketAnalysisMode mode;
   final String endpoint;
 
-  /// Analyse l'image et renvoie les produits à valider.
+  /// Analyse l'image et renvoie seulement les produits.
+  /// Garde cette méthode pour compatibilité avec le reste de l'app.
   Future<List<DetectedProductDraft>> analyzeTicket(Uint8List imageBytes) async {
+    final report = await analyzeTicketDetailed(imageBytes);
+    return report.products;
+  }
+
+  /// Analyse l'image et renvoie aussi les informations de diagnostic.
+  Future<TicketAnalysisReport> analyzeTicketDetailed(Uint8List imageBytes) async {
     await Future<void>.delayed(const Duration(milliseconds: 500));
 
     if (mode == TicketAnalysisMode.gemini) {
       try {
-        final geminiResult = await _analyzeWithGemini(imageBytes);
-        if (geminiResult.products.isNotEmpty) {
-          return geminiResult.products;
+        final geminiReport = await _analyzeWithGemini(imageBytes);
+        if (geminiReport.products.isNotEmpty) {
+          return geminiReport;
         }
       } catch (error) {
-        debugPrint('Analyse Gemini indisponible, fallback démo : $error');
+        debugPrint('Analyse Gemini indisponible : $error');
+        throw Exception(
+          'Analyse Gemini indisponible. Si tu testes en local, utilise le site Netlify déployé ou lance Netlify Dev. Détail : $error',
+        );
       }
     }
 
     await Future<void>.delayed(const Duration(milliseconds: 900));
-    return _simulateAnalysis(imageBytes).products;
+    return TicketAnalysisReport(
+      products: _simulateAnalysis(imageBytes).products,
+      source: TicketAnalysisSource.demo,
+    );
   }
 
-  Future<TicketAnalysisResult> _analyzeWithGemini(Uint8List imageBytes) async {
+  Future<TicketAnalysisReport> _analyzeWithGemini(Uint8List imageBytes) async {
     final now = DateTime.now();
     final idPrefix = 'gemini_${now.microsecondsSinceEpoch}';
 
@@ -63,6 +105,7 @@ class TicketAnalysisService {
     );
 
     final decoded = jsonDecode(responseText);
+    final model = decoded is Map<String, dynamic> ? decoded['model'] as String? : null;
     final productsJson = switch (decoded) {
       final List<dynamic> list => list,
       final Map<String, dynamic> map when map['products'] is List<dynamic> =>
@@ -70,9 +113,15 @@ class TicketAnalysisService {
       _ => throw const FormatException('Réponse IA invalide'),
     };
 
-    return TicketAnalysisResult.fromJsonList(
+    final result = TicketAnalysisResult.fromJsonList(
       productsJson,
       idPrefix: idPrefix,
+    );
+
+    return TicketAnalysisReport(
+      products: result.products,
+      source: TicketAnalysisSource.gemini,
+      model: model,
     );
   }
 

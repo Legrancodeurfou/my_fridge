@@ -53,6 +53,9 @@ class ScanHistoryItem {
     required this.detectedCount,
     required this.validatedCount,
     required this.products,
+    this.source = 'unknown',
+    this.model,
+    this.errorMessage,
   });
 
   final String id;
@@ -60,6 +63,26 @@ class ScanHistoryItem {
   final int detectedCount;
   final int validatedCount;
   final List<ScanHistoryProduct> products;
+  final String source;
+  final String? model;
+  final String? errorMessage;
+
+  bool get usedGemini => source == 'gemini';
+  bool get usedDemo => source == 'demo';
+  bool get usedFallback => usedDemo && errorMessage != null && errorMessage!.trim().isNotEmpty;
+
+  String get sourceLabel {
+    return switch (source) {
+      'gemini' => 'Gemini',
+      'demo' => 'Mode démo',
+      _ => 'Inconnu',
+    };
+  }
+
+  String get statusLabel {
+    if (usedFallback) return 'Fallback démo';
+    return 'Réussi';
+  }
 
   String get summary {
     if (products.isEmpty) return 'Aucun produit ajouté';
@@ -74,6 +97,9 @@ class ScanHistoryItem {
       'scannedAt': scannedAt.toIso8601String(),
       'detectedCount': detectedCount,
       'validatedCount': validatedCount,
+      'source': source,
+      'model': model,
+      'errorMessage': errorMessage,
       'products': products.map((product) => product.toJson()).toList(),
     };
   }
@@ -92,6 +118,9 @@ class ScanHistoryItem {
       detectedCount: (json['detectedCount'] as num?)?.toInt() ?? products.length,
       validatedCount: (json['validatedCount'] as num?)?.toInt() ?? products.length,
       products: products,
+      source: json['source'] as String? ?? 'unknown',
+      model: json['model'] as String?,
+      errorMessage: json['errorMessage'] as String?,
     );
   }
 }

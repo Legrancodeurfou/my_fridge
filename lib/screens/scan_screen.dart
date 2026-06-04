@@ -152,14 +152,38 @@ Future<void> _pickImage(ImageSource source) async {
 
     setState(() => _isScanning = true);
 
-    final detectedDrafts =
-        await _ticketAnalysis.analyzeTicket(_pickedImageBytes!);
+    try {
+      final report = await _ticketAnalysis.analyzeTicketDetailed(_pickedImageBytes!);
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    setState(() => _isScanning = false);
+      setState(() => _isScanning = false);
 
-    await _showValidationSheet(detectedDrafts);
+      if (report.products.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            content: const Text('Aucun produit alimentaire détecté sur ce ticket.'),
+          ),
+        );
+        return;
+      }
+
+      await _showValidationSheet(report);
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() => _isScanning = false);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          content: Text('Erreur scan IA : $error'),
+        ),
+      );
+    }
   }
 
   Future<void> _showManualAddSheet() {
@@ -195,7 +219,7 @@ Future<void> _pickImage(ImageSource source) async {
     );
   }
 
-  Future<void> _showValidationSheet(List<DetectedProductDraft> detectedDrafts) {
+  Future<void> _showValidationSheet(TicketAnalysisReport report) {
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -204,13 +228,16 @@ Future<void> _pickImage(ImageSource source) async {
       enableDrag: false,
       builder: (sheetContext) {
         return _ScanValidationSheet(
-          detectedDrafts: detectedDrafts,
+          detectedDrafts: report.products,
           onCancel: () => Navigator.pop(sheetContext),
           onValidate: (selectedFoods) {
             widget.store.addFoods(selectedFoods);
             widget.historyStore.addScan(
-              detectedCount: detectedDrafts.length,
+              detectedCount: report.products.length,
               validatedFoods: selectedFoods,
+              source: report.source.name,
+              model: report.model,
+              errorMessage: report.errorMessage,
             );
             Navigator.pop(sheetContext);
 
@@ -336,6 +363,8 @@ Future<void> _pickImage(ImageSource source) async {
           ),
           const SizedBox(height: 32),
           _RecentScansSection(historyStore: widget.historyStore),
+          const SizedBox(height: 20),
+          _AiDiagnosticSection(historyStore: widget.historyStore),
         ],
       ),
     );
@@ -403,6 +432,138 @@ Future<void> _pickImage(ImageSource source) async {
 }
 
 /// Carte d’aperçu du ticket (style aligné sur les cartes du frigo).
+
+
+class _AiDiagnosticSection extends StatelessWidget {
+  const _AiDiagnosticSection({required this.historyStore});
+
+  final ScanHistoryStore historyStore;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: historyStore,
+      builder: (context, _) {
+        final latestScan = historyStore.items.isEmpty ? null : historyStore.items.first;
+        final theme = Theme.of(context);
+        final colorScheme = theme.colorScheme;
+
+        return Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: colorScheme.surface,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: colorScheme.outlineVariant.withValues(alpha: 0.45),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: colorScheme.shadow.withValues(alpha: 0.04),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: colorScheme.secondaryContainer.withValues(alpha: 0.55),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(Icons.bug_report_outlined, color: colorScheme.secondary),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Diagnostic IA',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              if (latestScan == null)
+                Text(
+                  'Aucun scan analysé pour l’instant.',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                )
+              else ...[
+                _DiagnosticRow(label: 'Dernier scan', value: latestScan.sourceLabel),
+                _DiagnosticRow(label: 'Statut', value: latestScan.statusLabel),
+                _DiagnosticRow(
+                  label: 'Produits',
+                  value: '${latestScan.validatedCount}/${latestScan.detectedCount} validés',
+                ),
+                if (latestScan.model != null && latestScan.model!.trim().isNotEmpty)
+                  _DiagnosticRow(label: 'Modèle', value: latestScan.model!),
+                if (latestScan.usedFallback)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      'Gemini a échoué, l’app a utilisé le mode démo de secours.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.error,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _DiagnosticRow extends StatelessWidget {
+  const _DiagnosticRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _RecentScansSection extends StatelessWidget {
   const _RecentScansSection({required this.historyStore});
@@ -571,6 +732,14 @@ class _ScanHistoryCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 3),
                     Text(
+                      '${scan.sourceLabel} • ${scan.statusLabel}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: scan.usedFallback ? colorScheme.error : colorScheme.primary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
                       '${scan.validatedCount}/${scan.detectedCount} produit${scan.detectedCount > 1 ? 's' : ''} ajouté${scan.validatedCount > 1 ? 's' : ''}',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: colorScheme.onSurfaceVariant,
@@ -649,6 +818,8 @@ class _ScanHistoryDetailSheet extends StatelessWidget {
                   color: colorScheme.onSurfaceVariant,
                 ),
               ),
+              const SizedBox(height: 14),
+              _ScanDiagnosticBox(scan: scan),
               const SizedBox(height: 18),
               ...scan.products.map(
                 (product) => Padding(
@@ -677,6 +848,51 @@ class _ScanHistoryDetailSheet extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+
+class _ScanDiagnosticBox extends StatelessWidget {
+  const _ScanDiagnosticBox({required this.scan});
+
+  final ScanHistoryItem scan;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        children: [
+          _DiagnosticRow(label: 'Source', value: scan.sourceLabel),
+          _DiagnosticRow(label: 'Statut', value: scan.statusLabel),
+          _DiagnosticRow(
+            label: 'Produits validés',
+            value: '${scan.validatedCount}/${scan.detectedCount}',
+          ),
+          if (scan.model != null && scan.model!.trim().isNotEmpty)
+            _DiagnosticRow(label: 'Modèle', value: scan.model!),
+          if (scan.errorMessage != null && scan.errorMessage!.trim().isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                scan.errorMessage!,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.error,
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -1278,7 +1494,7 @@ class _ManualFoodFormSheetState extends State<_ManualFoodFormSheet> {
                 ),
                 const SizedBox(height: 14),
                 DropdownButtonFormField<FoodCategory>(
-                  initialValue: _category,
+                  value: _category,
                   decoration: const InputDecoration(
                     labelText: 'Catégorie',
                     prefixIcon: Icon(Icons.category_rounded),
@@ -1309,7 +1525,7 @@ class _ManualFoodFormSheetState extends State<_ManualFoodFormSheet> {
                     SizedBox(
                       width: 130,
                       child: DropdownButtonFormField<String>(
-                        initialValue: _unit,
+                        value: _unit,
                         decoration: const InputDecoration(labelText: 'Unité'),
                         items: MeasurementHelper.units.map((unit) {
                           return DropdownMenuItem(
