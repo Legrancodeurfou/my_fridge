@@ -166,7 +166,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const _InfoCard(
                 icon: Icons.info_outline_rounded,
                 title: 'Version MVP',
-                subtitle: 'My Fridge MVP v0.1',
+                subtitle: 'My Fridge MVP v0.2',
               ),
             ],
           ),
