@@ -1,22 +1,40 @@
 import 'package:flutter/material.dart';
 
+import '../data/favorite_recipes_store.dart';
 import '../data/fridge_store.dart';
 import '../data/profile_store.dart';
+import '../data/recipe_notes_store.dart';
+import '../data/scan_history_store.dart';
+import '../data/shopping_list_store.dart';
 import '../services/auth_service.dart';
+import '../services/cloud_favorite_recipes_service.dart';
 import '../services/cloud_foods_service.dart';
+import '../services/cloud_recipe_notes_service.dart';
+import '../services/cloud_scan_history_service.dart';
+import '../services/cloud_shopping_list_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({
     super.key,
     required this.store,
     required this.fridgeStore,
+    required this.shoppingListStore,
+    required this.scanHistoryStore,
+    required this.favoriteRecipesStore,
+    required this.recipeNotesStore,
     required this.authService,
+    required this.onCloudRestoreStateChanged,
     required this.onResetDemoData,
   });
 
   final ProfileStore store;
   final FridgeStore fridgeStore;
+  final ShoppingListStore shoppingListStore;
+  final ScanHistoryStore scanHistoryStore;
+  final FavoriteRecipesStore favoriteRecipesStore;
+  final RecipeNotesStore recipeNotesStore;
   final AuthService authService;
+  final Future<void> Function(bool isRestoring) onCloudRestoreStateChanged;
   final Future<void> Function() onResetDemoData;
 
   @override
@@ -26,6 +44,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   late final TextEditingController _nameController;
   bool _isSyncingFridge = false;
+  bool _isRestoringCloudData = false;
 
   @override
   void initState() {
@@ -140,6 +159,69 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Future<void> _restoreAllCloudData() async {
+    if (_isSyncingFridge || _isRestoringCloudData) return;
+
+    if (!widget.authService.isSignedIn) {
+      _showSnackBar('Connecte-toi avec Google avant de restaurer tes données.');
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Restaurer les données cloud ?'),
+          content: const Text(
+            'Les données locales actuelles seront remplacées par les données sauvegardées dans Supabase.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Annuler'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Restaurer'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isRestoringCloudData = true);
+
+    try {
+      await widget.onCloudRestoreStateChanged(true);
+
+      final cloudFoods = await CloudFoodsService.downloadFoods();
+      final cloudShoppingItems = await CloudShoppingListService.downloadItems();
+      final cloudScanHistory = await CloudScanHistoryService.downloadItems();
+      final cloudFavoriteRecipes =
+          await CloudFavoriteRecipesService.downloadFavorites();
+      final cloudRecipeNotes = await CloudRecipeNotesService.downloadNotes();
+
+      await widget.fridgeStore.replaceAllFoods(cloudFoods);
+      await widget.shoppingListStore.replaceAllItems(cloudShoppingItems);
+      await widget.scanHistoryStore.replaceAllItems(cloudScanHistory);
+      await widget.favoriteRecipesStore.replaceAllFavorites(
+        cloudFavoriteRecipes,
+      );
+      await widget.recipeNotesStore.replaceAllNotes(cloudRecipeNotes);
+
+      if (!mounted) return;
+      _showSnackBar('Tes données cloud ont été restaurées.');
+    } catch (error) {
+      if (!mounted) return;
+      _showSnackBar('Restauration cloud impossible : $error');
+    } finally {
+      await widget.onCloudRestoreStateChanged(false);
+      if (mounted) setState(() => _isRestoringCloudData = false);
+    }
+  }
+
   void _showSnackBar(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -221,6 +303,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 8),
               _AuthCard(
                 authService: widget.authService,
+                isDisabled: _isRestoringCloudData,
                 onSignIn: _signInWithGoogle,
                 onSignOut: _signOut,
               ),
@@ -229,11 +312,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 8),
               _CloudSyncCard(
                 authService: widget.authService,
-                isSyncing: _isSyncingFridge,
+                isSyncing: _isSyncingFridge || _isRestoringCloudData,
                 localFoodCount: widget.fridgeStore.foods.length,
                 onUpload: _uploadFridgeToCloud,
                 onDownload: _downloadFridgeFromCloud,
               ),
+              if (widget.authService.isSignedIn) ...[
+                const SizedBox(height: 12),
+                _CloudRestoreCard(
+                  isBusy: _isSyncingFridge || _isRestoringCloudData,
+                  isRestoring: _isRestoringCloudData,
+                  onRestore: _restoreAllCloudData,
+                ),
+              ],
               const SizedBox(height: 24),
               const _SectionTitle(title: 'Préférences'),
               const SizedBox(height: 8),
@@ -291,7 +382,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 24),
               const _SectionTitle(title: 'Données de test'),
               const SizedBox(height: 8),
-              _ResetDataCard(onReset: _confirmResetDemoData),
+              _ResetDataCard(
+                isDisabled: _isRestoringCloudData,
+                onReset: _confirmResetDemoData,
+              ),
               const SizedBox(height: 24),
               const _InfoCard(
                 icon: Icons.info_outline_rounded,
@@ -455,11 +549,13 @@ class _SwitchCard extends StatelessWidget {
 class _AuthCard extends StatelessWidget {
   const _AuthCard({
     required this.authService,
+    required this.isDisabled,
     required this.onSignIn,
     required this.onSignOut,
   });
 
   final AuthService authService;
+  final bool isDisabled;
   final VoidCallback onSignIn;
   final VoidCallback onSignOut;
 
@@ -541,7 +637,7 @@ class _AuthCard extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
-                  onPressed: authService.isBusy ? null : onSignOut,
+                  onPressed: authService.isBusy || isDisabled ? null : onSignOut,
                   icon: const Icon(Icons.logout_rounded),
                   label: const Text('Se déconnecter'),
                 ),
@@ -599,7 +695,7 @@ class _AuthCard extends StatelessWidget {
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                onPressed: authService.isBusy ? null : onSignIn,
+                onPressed: authService.isBusy || isDisabled ? null : onSignIn,
                 icon: authService.isBusy
                     ? const SizedBox(
                         width: 18,
@@ -616,7 +712,6 @@ class _AuthCard extends StatelessWidget {
     );
   }
 }
-
 
 class _CloudSyncCard extends StatelessWidget {
   const _CloudSyncCard({
@@ -706,9 +801,89 @@ class _CloudSyncCard extends StatelessWidget {
 }
 
 
-class _ResetDataCard extends StatelessWidget {
-  const _ResetDataCard({required this.onReset});
+class _CloudRestoreCard extends StatelessWidget {
+  const _CloudRestoreCard({
+    required this.isBusy,
+    required this.isRestoring,
+    required this.onRestore,
+  });
 
+  final bool isBusy;
+  final bool isRestoring;
+  final VoidCallback onRestore;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return _CardContainer(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.cloud_download_rounded, color: colorScheme.primary),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Restaurer mes données cloud',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Remplace le frigo, les courses, les scans, les favoris et les notes locales par les données sauvegardées dans Supabase.',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: isBusy ? null : onRestore,
+                icon: isRestoring
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.restore_rounded),
+                label: Text(
+                  isRestoring
+                      ? 'Restauration en cours...'
+                      : 'Récupérer toutes mes données depuis le cloud',
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
+class _ResetDataCard extends StatelessWidget {
+  const _ResetDataCard({
+    required this.isDisabled,
+    required this.onReset,
+  });
+
+  final bool isDisabled;
   final VoidCallback onReset;
 
   @override
@@ -753,7 +928,7 @@ class _ResetDataCard extends StatelessWidget {
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
-                onPressed: onReset,
+                onPressed: isDisabled ? null : onReset,
                 icon: const Icon(Icons.refresh_rounded),
                 label: const Text('Réinitialiser les données de démo'),
               ),

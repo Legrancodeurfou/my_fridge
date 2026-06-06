@@ -163,6 +163,7 @@ class _MainNavigationState extends State<MainNavigation> {
   bool _isUploadingScanHistoryToCloud = false;
   bool _isUploadingFavoriteRecipesToCloud = false;
   bool _isUploadingRecipeNotesToCloud = false;
+  bool _isRestoringCloudData = false;
 
   @override
   void initState() {
@@ -201,7 +202,7 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 
   void _scheduleFridgeCloudSync() {
-    if (!widget.stores.authService.isSignedIn) return;
+    if (_isRestoringCloudData || !widget.stores.authService.isSignedIn) return;
 
     _fridgeCloudSyncDebounce?.cancel();
     _fridgeCloudSyncDebounce = Timer(
@@ -211,7 +212,9 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 
   Future<void> _uploadFridgeToCloudSilently() async {
-    if (_isUploadingFridgeToCloud || !widget.stores.authService.isSignedIn) {
+    if (_isRestoringCloudData ||
+        _isUploadingFridgeToCloud ||
+        !widget.stores.authService.isSignedIn) {
       return;
     }
 
@@ -227,7 +230,8 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 
   void _scheduleShoppingListCloudSync() {
-    if (!SupabaseService.isInitialized ||
+    if (_isRestoringCloudData ||
+        !SupabaseService.isInitialized ||
         !widget.stores.authService.isSignedIn) {
       return;
     }
@@ -240,7 +244,8 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 
   Future<void> _uploadShoppingListToCloudSilently() async {
-    if (_isUploadingShoppingListToCloud ||
+    if (_isRestoringCloudData ||
+        _isUploadingShoppingListToCloud ||
         !SupabaseService.isInitialized ||
         !widget.stores.authService.isSignedIn) {
       return;
@@ -265,7 +270,8 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 
   void _scheduleScanHistoryCloudSync() {
-    if (!SupabaseService.isInitialized ||
+    if (_isRestoringCloudData ||
+        !SupabaseService.isInitialized ||
         !widget.stores.authService.isSignedIn) {
       return;
     }
@@ -278,7 +284,8 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 
   Future<void> _uploadScanHistoryToCloudSilently() async {
-    if (_isUploadingScanHistoryToCloud ||
+    if (_isRestoringCloudData ||
+        _isUploadingScanHistoryToCloud ||
         !SupabaseService.isInitialized ||
         !widget.stores.authService.isSignedIn) {
       return;
@@ -303,7 +310,8 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 
   void _scheduleFavoriteRecipesCloudSync() {
-    if (!SupabaseService.isInitialized ||
+    if (_isRestoringCloudData ||
+        !SupabaseService.isInitialized ||
         !widget.stores.authService.isSignedIn) {
       return;
     }
@@ -316,7 +324,8 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 
   Future<void> _uploadFavoriteRecipesToCloudSilently() async {
-    if (_isUploadingFavoriteRecipesToCloud ||
+    if (_isRestoringCloudData ||
+        _isUploadingFavoriteRecipesToCloud ||
         !SupabaseService.isInitialized ||
         !widget.stores.authService.isSignedIn) {
       return;
@@ -341,7 +350,8 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 
   void _scheduleRecipeNotesCloudSync() {
-    if (!SupabaseService.isInitialized ||
+    if (_isRestoringCloudData ||
+        !SupabaseService.isInitialized ||
         !widget.stores.authService.isSignedIn) {
       return;
     }
@@ -354,7 +364,8 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 
   Future<void> _uploadRecipeNotesToCloudSilently() async {
-    if (_isUploadingRecipeNotesToCloud ||
+    if (_isRestoringCloudData ||
+        _isUploadingRecipeNotesToCloud ||
         !SupabaseService.isInitialized ||
         !widget.stores.authService.isSignedIn) {
       return;
@@ -375,6 +386,26 @@ class _MainNavigationState extends State<MainNavigation> {
       );
     } finally {
       _isUploadingRecipeNotesToCloud = false;
+    }
+  }
+
+  Future<void> _setCloudRestoreInProgress(bool isRestoring) async {
+    _isRestoringCloudData = isRestoring;
+
+    if (!isRestoring) return;
+
+    _fridgeCloudSyncDebounce?.cancel();
+    _shoppingListCloudSyncDebounce?.cancel();
+    _scanHistoryCloudSyncDebounce?.cancel();
+    _favoriteRecipesCloudSyncDebounce?.cancel();
+    _recipeNotesCloudSyncDebounce?.cancel();
+
+    while (_isUploadingFridgeToCloud ||
+        _isUploadingShoppingListToCloud ||
+        _isUploadingScanHistoryToCloud ||
+        _isUploadingFavoriteRecipesToCloud ||
+        _isUploadingRecipeNotesToCloud) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
     }
   }
 
@@ -433,7 +464,12 @@ class _MainNavigationState extends State<MainNavigation> {
       ProfileScreen(
         store: profileStore,
         fridgeStore: fridgeStore,
+        shoppingListStore: shoppingListStore,
+        scanHistoryStore: scanHistoryStore,
+        favoriteRecipesStore: favoriteRecipesStore,
+        recipeNotesStore: recipeNotesStore,
         authService: authService,
+        onCloudRestoreStateChanged: _setCloudRestoreInProgress,
         onResetDemoData: _resetDemoData,
       ),
     ];
