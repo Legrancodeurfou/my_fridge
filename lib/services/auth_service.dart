@@ -6,7 +6,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'supabase_service.dart';
 
 class AuthService extends ChangeNotifier {
-  AuthService._();
+  AuthService() {
+    _initialize();
+  }
 
   StreamSubscription<AuthState>? _authSubscription;
   User? _user;
@@ -21,18 +23,13 @@ class AuthService extends ChangeNotifier {
   String? get userId => _user?.id;
   String? get errorMessage => _errorMessage;
 
-  static Future<AuthService> load() async {
-    final service = AuthService._();
-    await service._initialize();
-    return service;
-  }
-
-  Future<void> _initialize() async {
+  void _initialize() {
     if (!SupabaseService.isInitialized) return;
 
     _user = SupabaseService.client.auth.currentUser;
+
     if (_user != null) {
-      await _upsertCloudUser();
+      _upsertCloudUser();
     }
 
     _authSubscription = SupabaseService.client.auth.onAuthStateChange.listen(
@@ -106,6 +103,7 @@ class AuthService extends ChangeNotifier {
       );
     } catch (error) {
       _errorMessage = 'Profil cloud non synchronisé : $error';
+      notifyListeners();
     }
   }
 

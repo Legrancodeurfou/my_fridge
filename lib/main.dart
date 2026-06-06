@@ -12,6 +12,7 @@ import 'screens/profile_screen.dart';
 import 'screens/recipes_screen.dart';
 import 'screens/scan_screen.dart';
 import 'screens/shopping_list_screen.dart';
+import 'services/auth_service.dart';
 import 'services/supabase_service.dart';
 
 Future<void> main() async {
@@ -62,6 +63,7 @@ class _AppStores {
     required this.scanHistoryStore,
     required this.favoriteRecipesStore,
     required this.recipeNotesStore,
+    required this.authService,
   });
 
   final FridgeStore fridgeStore;
@@ -70,6 +72,7 @@ class _AppStores {
   final ScanHistoryStore scanHistoryStore;
   final FavoriteRecipesStore favoriteRecipesStore;
   final RecipeNotesStore recipeNotesStore;
+  final AuthService authService;
 
   static Future<_AppStores> load() async {
     final results = await Future.wait([
@@ -81,6 +84,8 @@ class _AppStores {
       RecipeNotesStore.load(),
     ]);
 
+    final authService = AuthService();
+
     return _AppStores(
       fridgeStore: results[0] as FridgeStore,
       profileStore: results[1] as ProfileStore,
@@ -88,6 +93,7 @@ class _AppStores {
       scanHistoryStore: results[3] as ScanHistoryStore,
       favoriteRecipesStore: results[4] as FavoriteRecipesStore,
       recipeNotesStore: results[5] as RecipeNotesStore,
+      authService: authService,
     );
   }
 
@@ -98,6 +104,7 @@ class _AppStores {
     scanHistoryStore.dispose();
     favoriteRecipesStore.dispose();
     recipeNotesStore.dispose();
+    authService.dispose();
   }
 }
 
@@ -168,6 +175,7 @@ class _MainNavigationState extends State<MainNavigation> {
     final scanHistoryStore = widget.stores.scanHistoryStore;
     final favoriteRecipesStore = widget.stores.favoriteRecipesStore;
     final recipeNotesStore = widget.stores.recipeNotesStore;
+    final authService = widget.stores.authService;
 
     final screens = [
       HomeScreen(
@@ -198,6 +206,7 @@ class _MainNavigationState extends State<MainNavigation> {
       ),
       ProfileScreen(
         store: profileStore,
+        authService: authService,
         onResetDemoData: _resetDemoData,
       ),
     ];
