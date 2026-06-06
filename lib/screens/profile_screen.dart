@@ -1258,8 +1258,53 @@ class _CloudBackupsCard extends StatelessWidget {
                     ],
                   ),
                 ),
+                IconButton(
+                  onPressed: isBusy ? null : onRefresh,
+                  tooltip: 'Actualiser',
+                  icon: const Icon(Icons.refresh_rounded),
+                ),
               ],
             ),
+            const SizedBox(height: 14),
+            if (isLoading)
+              Text(
+                'Actualisation des sauvegardes...',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              )
+            else if (backups.isEmpty)
+              Text(
+                'Aucune sauvegarde cloud pour l’instant',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              )
+            else ...[
+              Text(
+                'Dernière sauvegarde',
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: colorScheme.primary,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                _formatBackupDate(backups.first.createdAt),
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              if (backups.first.reason.trim().isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Text(
+                  backups.first.reason,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ],
             const SizedBox(height: 14),
             SizedBox(
               width: double.infinity,
@@ -1299,16 +1344,9 @@ class _CloudBackupsCard extends StatelessWidget {
               TextButton.icon(
                 onPressed: isBusy ? null : onRefresh,
                 icon: const Icon(Icons.refresh_rounded),
-                label: const Text('Réessayer'),
+                label: const Text('Actualiser'),
               ),
-            ] else if (backups.isEmpty)
-              Text(
-                'Aucune sauvegarde disponible.',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
-              )
-            else
+            ] else if (backups.isNotEmpty)
               for (var index = 0; index < backups.length; index++) ...[
                 if (index > 0) const Divider(height: 20),
                 _CloudBackupTile(
