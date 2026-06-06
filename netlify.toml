@@ -1,3 +1,7 @@
 [build]
-  command = "rm -rf flutter && git clone https://github.com/flutter/flutter.git -b stable --depth 1 && export PATH=\"$PATH:$(pwd)/flutter/bin\" && flutter config --enable-web && flutter pub get && flutter build web"
+  command = "rm -rf flutter && git clone https://github.com/flutter/flutter.git -b stable --depth 1 && export PATH=\"$PATH:$(pwd)/flutter/bin\" && flutter config --enable-web && flutter pub get && flutter build web --dart-define=SUPABASE_URL=$SUPABASE_URL --dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY"
   publish = "build/web"
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
