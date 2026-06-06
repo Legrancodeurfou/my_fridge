@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../data/favorite_recipes_store.dart';
@@ -13,6 +15,8 @@ import '../services/cloud_foods_service.dart';
 import '../services/cloud_recipe_notes_service.dart';
 import '../services/cloud_scan_history_service.dart';
 import '../services/cloud_shopping_list_service.dart';
+
+enum _CloudOnboardingChoice { restoreCloud, keepLocal, later }
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({
@@ -46,16 +50,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
   late final TextEditingController _nameController;
   bool _isSyncingFridge = false;
   bool _isRestoringCloudData = false;
+  bool _isCloudOnboardingInProgress = false;
   bool _isLoadingBackups = false;
   bool _isCreatingBackup = false;
   String? _restoringBackupId;
   String? _loadedBackupUserId;
+  String? _cloudOnboardingUserId;
   String? _backupError;
   List<CloudBackup> _cloudBackups = const [];
   int _backupLoadGeneration = 0;
 
   bool get _isCloudOperationInProgress =>
-      _isRestoringCloudData || _isCreatingBackup;
+      _isRestoringCloudData ||
+      _isCloudOnboardingInProgress ||
+      _isCreatingBackup;
 
   @override
   void initState() {
@@ -81,6 +89,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   void _onAuthStateChanged() {
     final userId = widget.authService.userId;
+
+    if (userId == null) {
+      _cloudOnboardingUserId = null;
+    } else if (_cloudOnboardingUserId != userId) {
+      _cloudOnboardingUserId = userId;
+      unawaited(_showCloudOnboarding(userId));
+    }
+
     if (_loadedBackupUserId == userId) return;
 
     _loadedBackupUserId = userId;
@@ -98,6 +114,66 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     _loadCloudBackups();
+  }
+
+  Future<void> _showCloudOnboarding(String userId) async {
+    _isCloudOnboardingInProgress = true;
+
+    try {
+      await widget.onCloudRestoreStateChanged(true);
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted || widget.authService.userId != userId) return;
+
+      final choice = await showDialog<_CloudOnboardingChoice>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) {
+          return AlertDialog(
+            title: const Text('Que veux-tu faire avec tes données cloud ?'),
+            content: const Text(
+              'Récupérer tes données cloud remplacera les données locales '
+              'actuelles. Garder les données locales laissera la '
+              'synchronisation automatique fonctionner normalement.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(
+                  dialogContext,
+                  _CloudOnboardingChoice.later,
+                ),
+                child: const Text('Plus tard'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(
+                  dialogContext,
+                  _CloudOnboardingChoice.keepLocal,
+                ),
+                child: const Text('Garder mes données locales'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(
+                  dialogContext,
+                  _CloudOnboardingChoice.restoreCloud,
+                ),
+                child: const Text('Récupérer mes données cloud'),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (choice == _CloudOnboardingChoice.restoreCloud && mounted) {
+        await _performGlobalCloudRestore(manageAutoSyncSuspension: false);
+      }
+    } catch (error) {
+      if (mounted) {
+        _showSnackBar('Préparation de la synchronisation impossible : $error');
+      }
+    } finally {
+      await widget.onCloudRestoreStateChanged(false);
+      _isCloudOnboardingInProgress = false;
+      if (mounted) setState(() {});
+    }
   }
 
   Future<void> _loadCloudBackups() async {
@@ -249,10 +325,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     if (confirmed != true || !mounted) return;
 
+    await _performGlobalCloudRestore(manageAutoSyncSuspension: true);
+  }
+
+  Future<void> _performGlobalCloudRestore({
+    required bool manageAutoSyncSuspension,
+  }) async {
     setState(() => _isRestoringCloudData = true);
 
     try {
-      await widget.onCloudRestoreStateChanged(true);
+      if (manageAutoSyncSuspension) {
+        await widget.onCloudRestoreStateChanged(true);
+      }
       await _downloadAllCloudDataToLocal();
 
       if (!mounted) return;
@@ -261,7 +345,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (!mounted) return;
       _showSnackBar('Restauration cloud impossible : $error');
     } finally {
-      await widget.onCloudRestoreStateChanged(false);
+      if (manageAutoSyncSuspension) {
+        await widget.onCloudRestoreStateChanged(false);
+      }
       if (mounted) setState(() => _isRestoringCloudData = false);
     }
   }
