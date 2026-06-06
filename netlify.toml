@@ -1,5 +1,5 @@
 [build]
-  command = "rm -rf flutter && git clone https://github.com/flutter/flutter.git -b stable --depth 1 && export PATH=\"$PATH:$(pwd)/flutter/bin\" && flutter config --enable-web && flutter pub get && flutter build web --dart-define=SUPABASE_URL=$SUPABASE_URL --dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY"
+  command = "echo SUPABASE_URL_LENGTH=${#SUPABASE_URL} && echo SUPABASE_ANON_KEY_LENGTH=${#SUPABASE_ANON_KEY} && rm -rf flutter && git clone https://github.com/flutter/flutter.git -b stable --depth 1 && export PATH=\"$PATH:$(pwd)/flutter/bin\" && flutter config --enable-web && flutter pub get && flutter build web --dart-define=SUPABASE_URL=$SUPABASE_URL --dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY"
   publish = "build/web"
   functions = "netlify/functions"
 
