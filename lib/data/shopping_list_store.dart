@@ -89,6 +89,12 @@ class ShoppingListStore extends ChangeNotifier {
     _save();
   }
 
+  Future<void> replaceAllItems(List<ShoppingItem> items) async {
+    _items = _mergeDuplicates(items);
+    notifyListeners();
+    await _save();
+  }
+
   Future<void> _save() async {
     final prefs = await SharedPreferences.getInstance();
     final encoded = jsonEncode(_items.map((item) => item.toJson()).toList());

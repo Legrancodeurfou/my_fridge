@@ -16,6 +16,7 @@ import 'screens/scan_screen.dart';
 import 'screens/shopping_list_screen.dart';
 import 'services/auth_service.dart';
 import 'services/cloud_foods_service.dart';
+import 'services/cloud_shopping_list_service.dart';
 import 'services/supabase_service.dart';
 
 Future<void> main() async {
@@ -150,18 +151,25 @@ class _MainNavigationState extends State<MainNavigation> {
 
   int _selectedIndex = 0;
   Timer? _fridgeCloudSyncDebounce;
+  Timer? _shoppingListCloudSyncDebounce;
   bool _isUploadingFridgeToCloud = false;
+  bool _isUploadingShoppingListToCloud = false;
 
   @override
   void initState() {
     super.initState();
     widget.stores.fridgeStore.addListener(_scheduleFridgeCloudSync);
+    widget.stores.shoppingListStore.addListener(_scheduleShoppingListCloudSync);
   }
 
   @override
   void dispose() {
     _fridgeCloudSyncDebounce?.cancel();
+    _shoppingListCloudSyncDebounce?.cancel();
     widget.stores.fridgeStore.removeListener(_scheduleFridgeCloudSync);
+    widget.stores.shoppingListStore.removeListener(
+      _scheduleShoppingListCloudSync,
+    );
     widget.stores.dispose();
     super.dispose();
   }
@@ -170,11 +178,16 @@ class _MainNavigationState extends State<MainNavigation> {
     if (!widget.stores.authService.isSignedIn) return;
 
     _fridgeCloudSyncDebounce?.cancel();
-    _fridgeCloudSyncDebounce = Timer(_cloudSyncDelay, _uploadFridgeToCloudSilently);
+    _fridgeCloudSyncDebounce = Timer(
+      _cloudSyncDelay,
+      _uploadFridgeToCloudSilently,
+    );
   }
 
   Future<void> _uploadFridgeToCloudSilently() async {
-    if (_isUploadingFridgeToCloud || !widget.stores.authService.isSignedIn) return;
+    if (_isUploadingFridgeToCloud || !widget.stores.authService.isSignedIn) {
+      return;
+    }
 
     _isUploadingFridgeToCloud = true;
     try {
@@ -184,6 +197,44 @@ class _MainNavigationState extends State<MainNavigation> {
       debugPrint('Synchronisation automatique du frigo impossible : $error');
     } finally {
       _isUploadingFridgeToCloud = false;
+    }
+  }
+
+  void _scheduleShoppingListCloudSync() {
+    if (!SupabaseService.isInitialized ||
+        !widget.stores.authService.isSignedIn) {
+      return;
+    }
+
+    _shoppingListCloudSyncDebounce?.cancel();
+    _shoppingListCloudSyncDebounce = Timer(
+      _cloudSyncDelay,
+      _uploadShoppingListToCloudSilently,
+    );
+  }
+
+  Future<void> _uploadShoppingListToCloudSilently() async {
+    if (_isUploadingShoppingListToCloud ||
+        !SupabaseService.isInitialized ||
+        !widget.stores.authService.isSignedIn) {
+      return;
+    }
+
+    _isUploadingShoppingListToCloud = true;
+    try {
+      await CloudShoppingListService.uploadItems(
+        widget.stores.shoppingListStore.items,
+      );
+      debugPrint(
+        'Liste de courses synchronisée automatiquement avec Supabase.',
+      );
+    } catch (error) {
+      debugPrint(
+        'Synchronisation automatique de la liste de courses impossible : '
+        '$error',
+      );
+    } finally {
+      _isUploadingShoppingListToCloud = false;
     }
   }
 
