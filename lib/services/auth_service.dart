@@ -13,12 +13,14 @@ class AuthService extends ChangeNotifier {
   StreamSubscription<AuthState>? _authSubscription;
   User? _user;
   bool _isBusy = false;
+  bool _isCloudOnboardingPending = false;
   String? _errorMessage;
 
   User? get user => _user;
   bool get isBusy => _isBusy;
   bool get isSignedIn => _user != null;
   bool get isAvailable => SupabaseService.isInitialized;
+  bool get isCloudOnboardingPending => _isCloudOnboardingPending;
   String? get email => _user?.email;
   String? get userId => _user?.id;
   String? get errorMessage => _errorMessage;
@@ -27,23 +29,39 @@ class AuthService extends ChangeNotifier {
     if (!SupabaseService.isInitialized) return;
 
     _user = SupabaseService.client.auth.currentUser;
+    _isCloudOnboardingPending = _user != null;
 
     if (_user != null) {
-      _upsertCloudUser();
+      unawaited(_upsertCloudUser());
     }
 
     _authSubscription = SupabaseService.client.auth.onAuthStateChange.listen(
       (authState) async {
-        _user = authState.session?.user;
+        final previousUserId = _user?.id;
+        final nextUser = authState.session?.user;
+
+        _user = nextUser;
         _errorMessage = null;
 
-        if (_user != null) {
-          await _upsertCloudUser();
+        if (nextUser == null) {
+          _isCloudOnboardingPending = false;
+        } else if (previousUserId != nextUser.id) {
+          _isCloudOnboardingPending = true;
         }
 
         notifyListeners();
+
+        if (nextUser != null) {
+          await _upsertCloudUser();
+        }
       },
     );
+  }
+
+  void completeCloudOnboarding() {
+    if (!_isCloudOnboardingPending) return;
+    _isCloudOnboardingPending = false;
+    notifyListeners();
   }
 
   Future<void> signInWithGoogle() async {
@@ -79,6 +97,7 @@ class AuthService extends ChangeNotifier {
     try {
       await SupabaseService.client.auth.signOut();
       _user = null;
+      _isCloudOnboardingPending = false;
       _errorMessage = null;
       notifyListeners();
     } catch (error) {

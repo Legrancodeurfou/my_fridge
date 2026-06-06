@@ -92,7 +92,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     if (userId == null) {
       _cloudOnboardingUserId = null;
-    } else if (_cloudOnboardingUserId != userId) {
+    } else if (widget.authService.isCloudOnboardingPending &&
+        _cloudOnboardingUserId != userId) {
       _cloudOnboardingUserId = userId;
       unawaited(_showCloudOnboarding(userId));
     }
@@ -118,6 +119,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _showCloudOnboarding(String userId) async {
     _isCloudOnboardingInProgress = true;
+    var choiceWasMade = false;
 
     try {
       await widget.onCloudRestoreStateChanged(true);
@@ -162,6 +164,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         },
       );
 
+      choiceWasMade = choice != null;
+
       if (choice == _CloudOnboardingChoice.restoreCloud && mounted) {
         await _performGlobalCloudRestore(manageAutoSyncSuspension: false);
       }
@@ -171,6 +175,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
     } finally {
       await widget.onCloudRestoreStateChanged(false);
+      if (choiceWasMade && widget.authService.userId == userId) {
+        widget.authService.completeCloudOnboarding();
+      }
       _isCloudOnboardingInProgress = false;
       if (mounted) setState(() {});
     }

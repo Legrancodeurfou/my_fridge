@@ -62,27 +62,22 @@ abstract final class CloudBackupService {
     final favoriteRecipes = await favoriteRecipesFuture;
     final recipeNotes = await recipeNotesFuture;
 
-    final row = await SupabaseService.client
-        .from('cloud_backups')
-        .insert({
-          'user_id': user.id,
-          'reason': _cleanReason(reason),
-          'payload': {
-            'foods': foods,
-            'shopping_items': shoppingItems,
-            'scan_history': scanHistory,
-            'favorite_recipes': favoriteRecipes,
-            'recipe_notes': recipeNotes,
-          },
-        })
-        .select('id, created_at, reason')
-        .single();
-
-    await deleteOldBackupsKeepingLatest3(
-      preserveBackupId: preserveBackupId,
+    final row = await SupabaseService.client.rpc(
+      'create_cloud_backup',
+      params: {
+        'p_reason': _cleanReason(reason),
+        'p_payload': {
+          'foods': foods,
+          'shopping_items': shoppingItems,
+          'scan_history': scanHistory,
+          'favorite_recipes': favoriteRecipes,
+          'recipe_notes': recipeNotes,
+        },
+        'p_preserve_backup_id': preserveBackupId,
+      },
     );
 
-    return CloudBackup.fromRow(Map<String, dynamic>.from(row));
+    return CloudBackup.fromRow(Map<String, dynamic>.from(row as Map));
   }
 
   static Future<List<CloudBackup>> listBackups() async {
@@ -120,9 +115,7 @@ abstract final class CloudBackupService {
     );
   }
 
-  static Future<void> deleteOldBackupsKeepingLatest3({
-    String? preserveBackupId,
-  }) async {
+  static Future<void> deleteOldBackupsKeepingLatest3() async {
     final user = _currentUser;
 
     final rows = await SupabaseService.client
@@ -131,22 +124,11 @@ abstract final class CloudBackupService {
         .eq('user_id', user.id)
         .order('created_at', ascending: false);
 
-    final backupIds = rows.map((row) => row['id'] as String).toList();
-    final keptIds = backupIds.take(_maxBackups).toSet();
-
-    if (preserveBackupId != null &&
-        backupIds.contains(preserveBackupId) &&
-        !keptIds.contains(preserveBackupId)) {
-      keptIds
-        ..remove(backupIds[_maxBackups - 1])
-        ..add(preserveBackupId);
-    }
-
-    for (final backupId in backupIds.where((id) => !keptIds.contains(id))) {
+    for (final row in rows.skip(_maxBackups)) {
       await SupabaseService.client
           .from('cloud_backups')
           .delete()
-          .eq('id', backupId)
+          .eq('id', row['id'] as String)
           .eq('user_id', user.id);
     }
   }
