@@ -77,6 +77,15 @@ class ScanHistoryStore extends ChangeNotifier {
     _save();
   }
 
+  Future<void> replaceAllItems(List<ScanHistoryItem> items) async {
+    final sortedItems = [...items]
+      ..sort((a, b) => b.scannedAt.compareTo(a.scannedAt));
+
+    _items = sortedItems.take(_maxItems).toList();
+    notifyListeners();
+    await _save();
+  }
+
   Future<void> _save() async {
     final prefs = await SharedPreferences.getInstance();
     final encoded = jsonEncode(_items.map((item) => item.toJson()).toList());

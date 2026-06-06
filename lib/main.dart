@@ -16,6 +16,7 @@ import 'screens/scan_screen.dart';
 import 'screens/shopping_list_screen.dart';
 import 'services/auth_service.dart';
 import 'services/cloud_foods_service.dart';
+import 'services/cloud_scan_history_service.dart';
 import 'services/cloud_shopping_list_service.dart';
 import 'services/supabase_service.dart';
 
@@ -152,23 +153,30 @@ class _MainNavigationState extends State<MainNavigation> {
   int _selectedIndex = 0;
   Timer? _fridgeCloudSyncDebounce;
   Timer? _shoppingListCloudSyncDebounce;
+  Timer? _scanHistoryCloudSyncDebounce;
   bool _isUploadingFridgeToCloud = false;
   bool _isUploadingShoppingListToCloud = false;
+  bool _isUploadingScanHistoryToCloud = false;
 
   @override
   void initState() {
     super.initState();
     widget.stores.fridgeStore.addListener(_scheduleFridgeCloudSync);
     widget.stores.shoppingListStore.addListener(_scheduleShoppingListCloudSync);
+    widget.stores.scanHistoryStore.addListener(_scheduleScanHistoryCloudSync);
   }
 
   @override
   void dispose() {
     _fridgeCloudSyncDebounce?.cancel();
     _shoppingListCloudSyncDebounce?.cancel();
+    _scanHistoryCloudSyncDebounce?.cancel();
     widget.stores.fridgeStore.removeListener(_scheduleFridgeCloudSync);
     widget.stores.shoppingListStore.removeListener(
       _scheduleShoppingListCloudSync,
+    );
+    widget.stores.scanHistoryStore.removeListener(
+      _scheduleScanHistoryCloudSync,
     );
     widget.stores.dispose();
     super.dispose();
@@ -235,6 +243,44 @@ class _MainNavigationState extends State<MainNavigation> {
       );
     } finally {
       _isUploadingShoppingListToCloud = false;
+    }
+  }
+
+  void _scheduleScanHistoryCloudSync() {
+    if (!SupabaseService.isInitialized ||
+        !widget.stores.authService.isSignedIn) {
+      return;
+    }
+
+    _scanHistoryCloudSyncDebounce?.cancel();
+    _scanHistoryCloudSyncDebounce = Timer(
+      _cloudSyncDelay,
+      _uploadScanHistoryToCloudSilently,
+    );
+  }
+
+  Future<void> _uploadScanHistoryToCloudSilently() async {
+    if (_isUploadingScanHistoryToCloud ||
+        !SupabaseService.isInitialized ||
+        !widget.stores.authService.isSignedIn) {
+      return;
+    }
+
+    _isUploadingScanHistoryToCloud = true;
+    try {
+      await CloudScanHistoryService.uploadItems(
+        widget.stores.scanHistoryStore.items,
+      );
+      debugPrint(
+        'Historique des scans synchronisé automatiquement avec Supabase.',
+      );
+    } catch (error) {
+      debugPrint(
+        'Synchronisation automatique de l’historique des scans impossible : '
+        '$error',
+      );
+    } finally {
+      _isUploadingScanHistoryToCloud = false;
     }
   }
 
