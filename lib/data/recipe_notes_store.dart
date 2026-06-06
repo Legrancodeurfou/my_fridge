@@ -10,6 +10,9 @@ class RecipeNotesStore extends ChangeNotifier {
 
   Map<String, String> _notesByRecipeName;
 
+  Map<String, String> get notesByRecipeName =>
+      Map.unmodifiable(_notesByRecipeName);
+
   static Future<RecipeNotesStore> load() async {
     final prefs = await SharedPreferences.getInstance();
     final savedJson = prefs.getString(_storageKey);
@@ -64,6 +67,12 @@ class RecipeNotesStore extends ChangeNotifier {
     await _save();
   }
 
+  Future<void> replaceAllNotes(Map<String, String> notes) async {
+    _notesByRecipeName = _normalizeNotes(notes);
+    notifyListeners();
+    await _save();
+  }
+
   Future<void> _save() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_storageKey, jsonEncode(_notesByRecipeName));
@@ -71,5 +80,17 @@ class RecipeNotesStore extends ChangeNotifier {
 
   static String _keyFor(String recipeName) {
     return recipeName.trim().toLowerCase();
+  }
+
+  static Map<String, String> _normalizeNotes(Map<String, String> notes) {
+    final result = <String, String>{};
+
+    for (final entry in notes.entries) {
+      final key = _keyFor(entry.key);
+      if (key.isEmpty || entry.value.trim().isEmpty) continue;
+      result[key] = entry.value;
+    }
+
+    return result;
   }
 }

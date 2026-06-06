@@ -17,6 +17,7 @@ import 'screens/shopping_list_screen.dart';
 import 'services/auth_service.dart';
 import 'services/cloud_favorite_recipes_service.dart';
 import 'services/cloud_foods_service.dart';
+import 'services/cloud_recipe_notes_service.dart';
 import 'services/cloud_scan_history_service.dart';
 import 'services/cloud_shopping_list_service.dart';
 import 'services/supabase_service.dart';
@@ -156,10 +157,12 @@ class _MainNavigationState extends State<MainNavigation> {
   Timer? _shoppingListCloudSyncDebounce;
   Timer? _scanHistoryCloudSyncDebounce;
   Timer? _favoriteRecipesCloudSyncDebounce;
+  Timer? _recipeNotesCloudSyncDebounce;
   bool _isUploadingFridgeToCloud = false;
   bool _isUploadingShoppingListToCloud = false;
   bool _isUploadingScanHistoryToCloud = false;
   bool _isUploadingFavoriteRecipesToCloud = false;
+  bool _isUploadingRecipeNotesToCloud = false;
 
   @override
   void initState() {
@@ -170,6 +173,7 @@ class _MainNavigationState extends State<MainNavigation> {
     widget.stores.favoriteRecipesStore.addListener(
       _scheduleFavoriteRecipesCloudSync,
     );
+    widget.stores.recipeNotesStore.addListener(_scheduleRecipeNotesCloudSync);
   }
 
   @override
@@ -178,6 +182,7 @@ class _MainNavigationState extends State<MainNavigation> {
     _shoppingListCloudSyncDebounce?.cancel();
     _scanHistoryCloudSyncDebounce?.cancel();
     _favoriteRecipesCloudSyncDebounce?.cancel();
+    _recipeNotesCloudSyncDebounce?.cancel();
     widget.stores.fridgeStore.removeListener(_scheduleFridgeCloudSync);
     widget.stores.shoppingListStore.removeListener(
       _scheduleShoppingListCloudSync,
@@ -187,6 +192,9 @@ class _MainNavigationState extends State<MainNavigation> {
     );
     widget.stores.favoriteRecipesStore.removeListener(
       _scheduleFavoriteRecipesCloudSync,
+    );
+    widget.stores.recipeNotesStore.removeListener(
+      _scheduleRecipeNotesCloudSync,
     );
     widget.stores.dispose();
     super.dispose();
@@ -329,6 +337,44 @@ class _MainNavigationState extends State<MainNavigation> {
       );
     } finally {
       _isUploadingFavoriteRecipesToCloud = false;
+    }
+  }
+
+  void _scheduleRecipeNotesCloudSync() {
+    if (!SupabaseService.isInitialized ||
+        !widget.stores.authService.isSignedIn) {
+      return;
+    }
+
+    _recipeNotesCloudSyncDebounce?.cancel();
+    _recipeNotesCloudSyncDebounce = Timer(
+      _cloudSyncDelay,
+      _uploadRecipeNotesToCloudSilently,
+    );
+  }
+
+  Future<void> _uploadRecipeNotesToCloudSilently() async {
+    if (_isUploadingRecipeNotesToCloud ||
+        !SupabaseService.isInitialized ||
+        !widget.stores.authService.isSignedIn) {
+      return;
+    }
+
+    _isUploadingRecipeNotesToCloud = true;
+    try {
+      await CloudRecipeNotesService.uploadNotes(
+        widget.stores.recipeNotesStore.notesByRecipeName,
+      );
+      debugPrint(
+        'Notes de recettes synchronisées automatiquement avec Supabase.',
+      );
+    } catch (error) {
+      debugPrint(
+        'Synchronisation automatique des notes de recettes impossible : '
+        '$error',
+      );
+    } finally {
+      _isUploadingRecipeNotesToCloud = false;
     }
   }
 
