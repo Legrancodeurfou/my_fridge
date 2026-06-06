@@ -25,7 +25,10 @@ class CloudBackup {
 abstract final class CloudBackupService {
   static const _maxBackups = 3;
 
-  static Future<CloudBackup> createBackup(String reason) async {
+  static Future<CloudBackup> createBackup(
+    String reason, {
+    String? preserveBackupId,
+  }) async {
     final user = _currentUser;
 
     final foodsFuture = SupabaseService.client
@@ -75,7 +78,9 @@ abstract final class CloudBackupService {
         .select('id, created_at, reason')
         .single();
 
-    await deleteOldBackupsKeepingLatest3();
+    await deleteOldBackupsKeepingLatest3(
+      preserveBackupId: preserveBackupId,
+    );
 
     return CloudBackup.fromRow(Map<String, dynamic>.from(row));
   }
@@ -115,7 +120,9 @@ abstract final class CloudBackupService {
     );
   }
 
-  static Future<void> deleteOldBackupsKeepingLatest3() async {
+  static Future<void> deleteOldBackupsKeepingLatest3({
+    String? preserveBackupId,
+  }) async {
     final user = _currentUser;
 
     final rows = await SupabaseService.client
@@ -124,11 +131,22 @@ abstract final class CloudBackupService {
         .eq('user_id', user.id)
         .order('created_at', ascending: false);
 
-    for (final row in rows.skip(_maxBackups)) {
+    final backupIds = rows.map((row) => row['id'] as String).toList();
+    final keptIds = backupIds.take(_maxBackups).toSet();
+
+    if (preserveBackupId != null &&
+        backupIds.contains(preserveBackupId) &&
+        !keptIds.contains(preserveBackupId)) {
+      keptIds
+        ..remove(backupIds[_maxBackups - 1])
+        ..add(preserveBackupId);
+    }
+
+    for (final backupId in backupIds.where((id) => !keptIds.contains(id))) {
       await SupabaseService.client
           .from('cloud_backups')
           .delete()
-          .eq('id', row['id'] as String)
+          .eq('id', backupId)
           .eq('user_id', user.id);
     }
   }

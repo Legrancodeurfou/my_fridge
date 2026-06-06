@@ -337,6 +337,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (manageAutoSyncSuspension) {
         await widget.onCloudRestoreStateChanged(true);
       }
+
+      final shouldContinue = await _createSafetyBackupOrConfirm(
+        'Avant restauration globale',
+      );
+      if (!shouldContinue) return;
+
       await _downloadAllCloudDataToLocal();
 
       if (!mounted) return;
@@ -349,6 +355,48 @@ class _ProfileScreenState extends State<ProfileScreen> {
         await widget.onCloudRestoreStateChanged(false);
       }
       if (mounted) setState(() => _isRestoringCloudData = false);
+    }
+  }
+
+  Future<bool> _createSafetyBackupOrConfirm(
+    String reason, {
+    String? preserveBackupId,
+  }) async {
+    try {
+      await CloudBackupService.createBackup(
+        reason,
+        preserveBackupId: preserveBackupId,
+      );
+      await _loadCloudBackups();
+      return true;
+    } catch (_) {
+      if (!mounted) return false;
+
+      final shouldContinue = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) {
+          return AlertDialog(
+            title: const Text('Sauvegarde de sécurité impossible'),
+            content: const Text(
+              'La sauvegarde de sécurité n’a pas pu être créée. '
+              'Continuer quand même ?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Annuler la restauration'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('Continuer quand même'),
+              ),
+            ],
+          );
+        },
+      );
+
+      return shouldContinue == true;
     }
   }
 
@@ -428,6 +476,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     try {
       await widget.onCloudRestoreStateChanged(true);
+
+      final shouldContinue = await _createSafetyBackupOrConfirm(
+        'Avant restauration sauvegarde',
+        preserveBackupId: backup.id,
+      );
+      if (!shouldContinue) return;
+
       await CloudBackupService.restoreBackup(backup.id);
       await _downloadAllCloudDataToLocal();
 
