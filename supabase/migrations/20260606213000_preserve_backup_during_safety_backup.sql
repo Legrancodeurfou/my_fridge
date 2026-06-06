@@ -50,7 +50,7 @@ begin
 
   perform pg_advisory_xact_lock(hashtext(current_user_id::text));
 
-  if jsonb_typeof(p_payload) <> 'object' then
+  if p_payload is null or jsonb_typeof(p_payload) <> 'object' then
     raise exception 'Payload de sauvegarde invalide.';
   end if;
 

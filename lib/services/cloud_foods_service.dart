@@ -6,17 +6,12 @@ import 'supabase_service.dart';
 abstract final class CloudFoodsService {
   static Future<void> uploadFoods(List<FoodItem> foods) async {
     final user = _currentUser;
-
-    await SupabaseService.client
-        .from('foods')
-        .delete()
-        .eq('user_id', user.id);
-
-    if (foods.isEmpty) return;
-
     final rows = foods.map((food) => _toSupabaseRow(food, user.id)).toList();
 
-    await SupabaseService.client.from('foods').insert(rows);
+    await SupabaseService.client.rpc(
+      'replace_user_foods',
+      params: {'p_foods': rows},
+    );
   }
 
   static Future<List<FoodItem>> downloadFoods() async {
