@@ -310,6 +310,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 24),
               const _SectionTitle(title: 'Synchronisation cloud'),
               const SizedBox(height: 8),
+              _CloudStatusCard(
+                authService: widget.authService,
+                isRestoring: _isRestoringCloudData,
+              ),
+              const SizedBox(height: 12),
               _CloudSyncCard(
                 authService: widget.authService,
                 isSyncing: _isSyncingFridge || _isRestoringCloudData,
@@ -704,6 +709,84 @@ class _AuthCard extends StatelessWidget {
                       )
                     : const Icon(Icons.login_rounded),
                 label: const Text('Se connecter avec Google'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CloudStatusCard extends StatelessWidget {
+  const _CloudStatusCard({
+    required this.authService,
+    required this.isRestoring,
+  });
+
+  final AuthService authService;
+  final bool isRestoring;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isCloudActive = authService.isAvailable && authService.isSignedIn;
+
+    return _CardContainer(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              isCloudActive
+                  ? Icons.cloud_done_rounded
+                  : Icons.cloud_off_rounded,
+              color: isCloudActive
+                  ? colorScheme.primary
+                  : colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'État cloud',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    authService.isSignedIn
+                        ? 'Connecté · ${authService.email ?? 'Compte Supabase'}'
+                        : 'Non connecté',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    isCloudActive
+                        ? 'Synchronisation automatique active'
+                        : 'Mode local uniquement',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  if (isRestoring) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Restauration cloud en cours...',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.primary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           ],
