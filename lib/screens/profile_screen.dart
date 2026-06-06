@@ -7,6 +7,7 @@ import '../data/recipe_notes_store.dart';
 import '../data/scan_history_store.dart';
 import '../data/shopping_list_store.dart';
 import '../services/auth_service.dart';
+import '../services/cloud_backup_service.dart';
 import '../services/cloud_favorite_recipes_service.dart';
 import '../services/cloud_foods_service.dart';
 import '../services/cloud_recipe_notes_service.dart';
@@ -45,16 +46,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
   late final TextEditingController _nameController;
   bool _isSyncingFridge = false;
   bool _isRestoringCloudData = false;
+  bool _isLoadingBackups = false;
+  bool _isCreatingBackup = false;
+  String? _restoringBackupId;
+  String? _loadedBackupUserId;
+  String? _backupError;
+  List<CloudBackup> _cloudBackups = const [];
+  int _backupLoadGeneration = 0;
+
+  bool get _isCloudOperationInProgress =>
+      _isRestoringCloudData || _isCreatingBackup;
 
   @override
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.store.profile.name);
     _nameController.addListener(_onNameChanged);
+    widget.authService.addListener(_onAuthStateChanged);
+    _onAuthStateChanged();
   }
 
   @override
   void dispose() {
+    widget.authService.removeListener(_onAuthStateChanged);
     _nameController
       ..removeListener(_onNameChanged)
       ..dispose();
@@ -65,6 +79,50 @@ class _ProfileScreenState extends State<ProfileScreen> {
     widget.store.updateName(_nameController.text);
   }
 
+  void _onAuthStateChanged() {
+    final userId = widget.authService.userId;
+    if (_loadedBackupUserId == userId) return;
+
+    _loadedBackupUserId = userId;
+    _backupLoadGeneration++;
+    _isLoadingBackups = false;
+
+    if (userId == null) {
+      if (!mounted) return;
+      setState(() {
+        _cloudBackups = const [];
+        _backupError = null;
+        _isLoadingBackups = false;
+      });
+      return;
+    }
+
+    _loadCloudBackups();
+  }
+
+  Future<void> _loadCloudBackups() async {
+    if (!widget.authService.isSignedIn || _isLoadingBackups) return;
+
+    final loadGeneration = _backupLoadGeneration;
+
+    setState(() {
+      _isLoadingBackups = true;
+      _backupError = null;
+    });
+
+    try {
+      final backups = await CloudBackupService.listBackups();
+      if (!mounted || loadGeneration != _backupLoadGeneration) return;
+      setState(() => _cloudBackups = backups);
+    } catch (error) {
+      if (!mounted || loadGeneration != _backupLoadGeneration) return;
+      setState(() => _backupError = 'Sauvegardes indisponibles : $error');
+    } finally {
+      if (mounted && loadGeneration == _backupLoadGeneration) {
+        setState(() => _isLoadingBackups = false);
+      }
+    }
+  }
 
   Future<void> _signInWithGoogle() async {
     try {
@@ -160,7 +218,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _restoreAllCloudData() async {
-    if (_isSyncingFridge || _isRestoringCloudData) return;
+    if (_isSyncingFridge || _isCloudOperationInProgress) return;
 
     if (!widget.authService.isSignedIn) {
       _showSnackBar('Connecte-toi avec Google avant de restaurer tes données.');
@@ -195,21 +253,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     try {
       await widget.onCloudRestoreStateChanged(true);
-
-      final cloudFoods = await CloudFoodsService.downloadFoods();
-      final cloudShoppingItems = await CloudShoppingListService.downloadItems();
-      final cloudScanHistory = await CloudScanHistoryService.downloadItems();
-      final cloudFavoriteRecipes =
-          await CloudFavoriteRecipesService.downloadFavorites();
-      final cloudRecipeNotes = await CloudRecipeNotesService.downloadNotes();
-
-      await widget.fridgeStore.replaceAllFoods(cloudFoods);
-      await widget.shoppingListStore.replaceAllItems(cloudShoppingItems);
-      await widget.scanHistoryStore.replaceAllItems(cloudScanHistory);
-      await widget.favoriteRecipesStore.replaceAllFavorites(
-        cloudFavoriteRecipes,
-      );
-      await widget.recipeNotesStore.replaceAllNotes(cloudRecipeNotes);
+      await _downloadAllCloudDataToLocal();
 
       if (!mounted) return;
       _showSnackBar('Tes données cloud ont été restaurées.');
@@ -219,6 +263,101 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } finally {
       await widget.onCloudRestoreStateChanged(false);
       if (mounted) setState(() => _isRestoringCloudData = false);
+    }
+  }
+
+  Future<void> _downloadAllCloudDataToLocal() async {
+    final cloudFoods = await CloudFoodsService.downloadFoods();
+    final cloudShoppingItems = await CloudShoppingListService.downloadItems();
+    final cloudScanHistory = await CloudScanHistoryService.downloadItems();
+    final cloudFavoriteRecipes =
+        await CloudFavoriteRecipesService.downloadFavorites();
+    final cloudRecipeNotes = await CloudRecipeNotesService.downloadNotes();
+
+    await widget.fridgeStore.replaceAllFoods(cloudFoods);
+    await widget.shoppingListStore.replaceAllItems(cloudShoppingItems);
+    await widget.scanHistoryStore.replaceAllItems(cloudScanHistory);
+    await widget.favoriteRecipesStore.replaceAllFavorites(cloudFavoriteRecipes);
+    await widget.recipeNotesStore.replaceAllNotes(cloudRecipeNotes);
+  }
+
+  Future<void> _createCloudBackup() async {
+    if (!widget.authService.isSignedIn ||
+        _isSyncingFridge ||
+        _isCloudOperationInProgress) {
+      return;
+    }
+
+    setState(() => _isCreatingBackup = true);
+
+    try {
+      await CloudBackupService.createBackup('Sauvegarde manuelle');
+      await _loadCloudBackups();
+
+      if (!mounted) return;
+      _showSnackBar('Sauvegarde cloud créée.');
+    } catch (error) {
+      if (!mounted) return;
+      _showSnackBar('Création de la sauvegarde impossible : $error');
+    } finally {
+      if (mounted) setState(() => _isCreatingBackup = false);
+    }
+  }
+
+  Future<void> _restoreCloudBackup(CloudBackup backup) async {
+    if (!widget.authService.isSignedIn ||
+        _isSyncingFridge ||
+        _isCloudOperationInProgress) {
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Restaurer cette sauvegarde ?'),
+          content: Text(
+            'La sauvegarde du ${_formatBackupDate(backup.createdAt)} remplacera les données cloud et locales actuelles.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Annuler'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Restaurer'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() {
+      _isRestoringCloudData = true;
+      _restoringBackupId = backup.id;
+    });
+
+    try {
+      await widget.onCloudRestoreStateChanged(true);
+      await CloudBackupService.restoreBackup(backup.id);
+      await _downloadAllCloudDataToLocal();
+
+      if (!mounted) return;
+      _showSnackBar('Sauvegarde restaurée avec succès.');
+    } catch (error) {
+      if (!mounted) return;
+      _showSnackBar('Restauration de la sauvegarde impossible : $error');
+    } finally {
+      await widget.onCloudRestoreStateChanged(false);
+      if (mounted) {
+        setState(() {
+          _isRestoringCloudData = false;
+          _restoringBackupId = null;
+        });
+      }
     }
   }
 
@@ -303,7 +442,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 8),
               _AuthCard(
                 authService: widget.authService,
-                isDisabled: _isRestoringCloudData,
+                isDisabled: _isCloudOperationInProgress,
                 onSignIn: _signInWithGoogle,
                 onSignOut: _signOut,
               ),
@@ -317,7 +456,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 12),
               _CloudSyncCard(
                 authService: widget.authService,
-                isSyncing: _isSyncingFridge || _isRestoringCloudData,
+                isSyncing: _isSyncingFridge || _isCloudOperationInProgress,
                 localFoodCount: widget.fridgeStore.foods.length,
                 onUpload: _uploadFridgeToCloud,
                 onDownload: _downloadFridgeFromCloud,
@@ -325,9 +464,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
               if (widget.authService.isSignedIn) ...[
                 const SizedBox(height: 12),
                 _CloudRestoreCard(
-                  isBusy: _isSyncingFridge || _isRestoringCloudData,
+                  isBusy: _isSyncingFridge || _isCloudOperationInProgress,
                   isRestoring: _isRestoringCloudData,
                   onRestore: _restoreAllCloudData,
+                ),
+                const SizedBox(height: 12),
+                _CloudBackupsCard(
+                  backups: _cloudBackups,
+                  errorMessage: _backupError,
+                  isBusy:
+                      _isSyncingFridge ||
+                      _isCloudOperationInProgress ||
+                      _isLoadingBackups,
+                  isCreating: _isCreatingBackup,
+                  isLoading: _isLoadingBackups,
+                  restoringBackupId: _restoringBackupId,
+                  onCreate: _createCloudBackup,
+                  onRefresh: _loadCloudBackups,
+                  onRestore: _restoreCloudBackup,
                 ),
               ],
               const SizedBox(height: 24),
@@ -388,7 +542,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const _SectionTitle(title: 'Données de test'),
               const SizedBox(height: 8),
               _ResetDataCard(
-                isDisabled: _isRestoringCloudData,
+                isDisabled: _isCloudOperationInProgress,
                 onReset: _confirmResetDemoData,
               ),
               const SizedBox(height: 24),
@@ -959,6 +1113,189 @@ class _CloudRestoreCard extends StatelessWidget {
   }
 }
 
+class _CloudBackupsCard extends StatelessWidget {
+  const _CloudBackupsCard({
+    required this.backups,
+    required this.errorMessage,
+    required this.isBusy,
+    required this.isCreating,
+    required this.isLoading,
+    required this.restoringBackupId,
+    required this.onCreate,
+    required this.onRefresh,
+    required this.onRestore,
+  });
+
+  final List<CloudBackup> backups;
+  final String? errorMessage;
+  final bool isBusy;
+  final bool isCreating;
+  final bool isLoading;
+  final String? restoringBackupId;
+  final VoidCallback onCreate;
+  final VoidCallback onRefresh;
+  final ValueChanged<CloudBackup> onRestore;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return _CardContainer(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.backup_rounded, color: colorScheme.primary),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Sauvegardes cloud',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Conserve automatiquement les 3 dernières sauvegardes complètes.',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: isBusy ? null : onCreate,
+                icon: isCreating
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.add_to_photos_rounded),
+                label: Text(
+                  isCreating
+                      ? 'Création en cours...'
+                      : 'Créer une sauvegarde maintenant',
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            if (isLoading)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: CircularProgressIndicator(),
+                ),
+              )
+            else if (errorMessage != null) ...[
+              Text(
+                errorMessage!,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.error,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: isBusy ? null : onRefresh,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Réessayer'),
+              ),
+            ] else if (backups.isEmpty)
+              Text(
+                'Aucune sauvegarde disponible.',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              )
+            else
+              for (var index = 0; index < backups.length; index++) ...[
+                if (index > 0) const Divider(height: 20),
+                _CloudBackupTile(
+                  backup: backups[index],
+                  isBusy: isBusy,
+                  isRestoring: restoringBackupId == backups[index].id,
+                  onRestore: () => onRestore(backups[index]),
+                ),
+              ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CloudBackupTile extends StatelessWidget {
+  const _CloudBackupTile({
+    required this.backup,
+    required this.isBusy,
+    required this.isRestoring,
+    required this.onRestore,
+  });
+
+  final CloudBackup backup;
+  final bool isBusy;
+  final bool isRestoring;
+  final VoidCallback onRestore;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Row(
+      children: [
+        Icon(Icons.history_rounded, color: colorScheme.onSurfaceVariant),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _formatBackupDate(backup.createdAt),
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                backup.reason,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+        IconButton(
+          onPressed: isBusy ? null : onRestore,
+          tooltip: 'Restaurer cette sauvegarde',
+          icon: isRestoring
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.restore_rounded),
+        ),
+      ],
+    );
+  }
+}
 
 class _ResetDataCard extends StatelessWidget {
   const _ResetDataCard({
@@ -1071,4 +1408,13 @@ class _CardContainer extends StatelessWidget {
       child: child,
     );
   }
+}
+
+String _formatBackupDate(DateTime value) {
+  final local = value.toLocal();
+  final day = local.day.toString().padLeft(2, '0');
+  final month = local.month.toString().padLeft(2, '0');
+  final hour = local.hour.toString().padLeft(2, '0');
+  final minute = local.minute.toString().padLeft(2, '0');
+  return '$day/$month/${local.year} à $hour:$minute';
 }
