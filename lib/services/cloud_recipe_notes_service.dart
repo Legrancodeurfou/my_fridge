@@ -6,11 +6,6 @@ abstract final class CloudRecipeNotesService {
   static Future<void> uploadNotes(Map<String, String> notes) async {
     final user = _currentUser;
 
-    await SupabaseService.client
-        .from('recipe_notes')
-        .delete()
-        .eq('user_id', user.id);
-
     final rows = _cleanNotes(notes).entries
         .map(
           (entry) => {
@@ -21,9 +16,10 @@ abstract final class CloudRecipeNotesService {
         )
         .toList();
 
-    if (rows.isEmpty) return;
-
-    await SupabaseService.client.from('recipe_notes').insert(rows);
+    await SupabaseService.client.rpc(
+      'replace_user_recipe_notes',
+      params: {'p_items': rows},
+    );
   }
 
   static Future<Map<String, String>> downloadNotes() async {

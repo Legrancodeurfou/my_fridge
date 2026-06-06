@@ -6,17 +6,12 @@ import 'supabase_service.dart';
 abstract final class CloudShoppingListService {
   static Future<void> uploadItems(List<ShoppingItem> items) async {
     final user = _currentUser;
-
-    await SupabaseService.client
-        .from('shopping_items')
-        .delete()
-        .eq('user_id', user.id);
-
-    if (items.isEmpty) return;
-
     final rows = items.map((item) => _toSupabaseRow(item, user.id)).toList();
 
-    await SupabaseService.client.from('shopping_items').insert(rows);
+    await SupabaseService.client.rpc(
+      'replace_user_shopping_items',
+      params: {'p_items': rows},
+    );
   }
 
   static Future<List<ShoppingItem>> downloadItems() async {

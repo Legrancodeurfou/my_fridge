@@ -6,17 +6,12 @@ import 'supabase_service.dart';
 abstract final class CloudScanHistoryService {
   static Future<void> uploadItems(List<ScanHistoryItem> items) async {
     final user = _currentUser;
-
-    await SupabaseService.client
-        .from('scan_history')
-        .delete()
-        .eq('user_id', user.id);
-
-    if (items.isEmpty) return;
-
     final rows = items.map((item) => _toSupabaseRow(item, user.id)).toList();
 
-    await SupabaseService.client.from('scan_history').insert(rows);
+    await SupabaseService.client.rpc(
+      'replace_user_scan_history',
+      params: {'p_items': rows},
+    );
   }
 
   static Future<List<ScanHistoryItem>> downloadItems() async {

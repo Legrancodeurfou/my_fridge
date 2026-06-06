@@ -6,18 +6,14 @@ abstract final class CloudFavoriteRecipesService {
   static Future<void> uploadFavorites(List<String> favoriteNames) async {
     final user = _currentUser;
 
-    await SupabaseService.client
-        .from('favorite_recipes')
-        .delete()
-        .eq('user_id', user.id);
-
     final rows = _cleanNames(favoriteNames)
         .map((recipeName) => {'user_id': user.id, 'recipe_name': recipeName})
         .toList();
 
-    if (rows.isEmpty) return;
-
-    await SupabaseService.client.from('favorite_recipes').insert(rows);
+    await SupabaseService.client.rpc(
+      'replace_user_favorite_recipes',
+      params: {'p_items': rows},
+    );
   }
 
   static Future<List<String>> downloadFavorites() async {
