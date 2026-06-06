@@ -49,6 +49,12 @@ class FavoriteRecipesStore extends ChangeNotifier {
     await _save();
   }
 
+  Future<void> replaceAllFavorites(List<String> favoriteNames) async {
+    _favoriteNames = _deduplicate(favoriteNames);
+    notifyListeners();
+    await _save();
+  }
+
   Future<void> _save() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(_storageKey, _favoriteNames);
