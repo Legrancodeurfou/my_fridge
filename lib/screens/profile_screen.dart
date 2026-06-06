@@ -1,17 +1,21 @@
 import 'package:flutter/material.dart';
 
+import '../data/fridge_store.dart';
 import '../data/profile_store.dart';
 import '../services/auth_service.dart';
+import '../services/cloud_foods_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({
     super.key,
     required this.store,
+    required this.fridgeStore,
     required this.authService,
     required this.onResetDemoData,
   });
 
   final ProfileStore store;
+  final FridgeStore fridgeStore;
   final AuthService authService;
   final Future<void> Function() onResetDemoData;
 
@@ -21,6 +25,7 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   late final TextEditingController _nameController;
+  bool _isSyncingFridge = false;
 
   @override
   void initState() {
@@ -65,6 +70,83 @@ class _ProfileScreenState extends State<ProfileScreen> {
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         content: const Text('Déconnecté'),
+      ),
+    );
+  }
+
+
+  Future<void> _uploadFridgeToCloud() async {
+    if (!widget.authService.isSignedIn) {
+      _showSnackBar('Connecte-toi avec Google avant de synchroniser.');
+      return;
+    }
+
+    setState(() => _isSyncingFridge = true);
+
+    try {
+      await CloudFoodsService.uploadFoods(widget.fridgeStore.foods);
+      if (!mounted) return;
+      _showSnackBar('Frigo sauvegardé dans le cloud.');
+    } catch (error) {
+      if (!mounted) return;
+      _showSnackBar('Sauvegarde cloud impossible : $error');
+    } finally {
+      if (mounted) setState(() => _isSyncingFridge = false);
+    }
+  }
+
+  Future<void> _downloadFridgeFromCloud() async {
+    if (!widget.authService.isSignedIn) {
+      _showSnackBar('Connecte-toi avec Google avant de synchroniser.');
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Remplacer le frigo local ?'),
+          content: const Text(
+            'Les aliments actuellement dans ton frigo local seront remplacés par ceux sauvegardés dans Supabase.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Annuler'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Importer'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isSyncingFridge = true);
+
+    try {
+      final cloudFoods = await CloudFoodsService.downloadFoods();
+      await widget.fridgeStore.replaceAllFoods(cloudFoods);
+      if (!mounted) return;
+      _showSnackBar('${cloudFoods.length} aliment(s) récupéré(s) depuis le cloud.');
+    } catch (error) {
+      if (!mounted) return;
+      _showSnackBar('Import cloud impossible : $error');
+    } finally {
+      if (mounted) setState(() => _isSyncingFridge = false);
+    }
+  }
+
+  void _showSnackBar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        content: Text(message),
       ),
     );
   }
@@ -141,6 +223,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 authService: widget.authService,
                 onSignIn: _signInWithGoogle,
                 onSignOut: _signOut,
+              ),
+              const SizedBox(height: 24),
+              const _SectionTitle(title: 'Synchronisation cloud'),
+              const SizedBox(height: 8),
+              _CloudSyncCard(
+                authService: widget.authService,
+                isSyncing: _isSyncingFridge,
+                localFoodCount: widget.fridgeStore.foods.length,
+                onUpload: _uploadFridgeToCloud,
+                onDownload: _downloadFridgeFromCloud,
               ),
               const SizedBox(height: 24),
               const _SectionTitle(title: 'Préférences'),
@@ -524,6 +616,95 @@ class _AuthCard extends StatelessWidget {
     );
   }
 }
+
+
+class _CloudSyncCard extends StatelessWidget {
+  const _CloudSyncCard({
+    required this.authService,
+    required this.isSyncing,
+    required this.localFoodCount,
+    required this.onUpload,
+    required this.onDownload,
+  });
+
+  final AuthService authService;
+  final bool isSyncing;
+  final int localFoodCount;
+  final VoidCallback onUpload;
+  final VoidCallback onDownload;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final canSync = authService.isAvailable && authService.isSignedIn && !isSyncing;
+
+    return _CardContainer(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.sync_rounded, color: colorScheme.primary),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Frigo cloud',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        authService.isSignedIn
+                            ? '$localFoodCount aliment(s) dans ton frigo local. Sauvegarde ou récupère manuellement depuis Supabase.'
+                            : 'Connecte-toi avec Google pour synchroniser ton frigo.',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: canSync ? onUpload : null,
+                icon: isSyncing
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.cloud_upload_rounded),
+                label: const Text('Sauvegarder mon frigo dans le cloud'),
+              ),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: canSync ? onDownload : null,
+                icon: const Icon(Icons.cloud_download_rounded),
+                label: const Text('Récupérer mon frigo depuis le cloud'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 
 class _ResetDataCard extends StatelessWidget {
   const _ResetDataCard({required this.onReset});

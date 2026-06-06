@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'data/favorite_recipes_store.dart';
@@ -13,6 +15,7 @@ import 'screens/recipes_screen.dart';
 import 'screens/scan_screen.dart';
 import 'screens/shopping_list_screen.dart';
 import 'services/auth_service.dart';
+import 'services/cloud_foods_service.dart';
 import 'services/supabase_service.dart';
 
 Future<void> main() async {
@@ -143,13 +146,45 @@ class MainNavigation extends StatefulWidget {
 
 class _MainNavigationState extends State<MainNavigation> {
   static const _fridgeTabIndex = 1;
+  static const _cloudSyncDelay = Duration(milliseconds: 1200);
 
   int _selectedIndex = 0;
+  Timer? _fridgeCloudSyncDebounce;
+  bool _isUploadingFridgeToCloud = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.stores.fridgeStore.addListener(_scheduleFridgeCloudSync);
+  }
 
   @override
   void dispose() {
+    _fridgeCloudSyncDebounce?.cancel();
+    widget.stores.fridgeStore.removeListener(_scheduleFridgeCloudSync);
     widget.stores.dispose();
     super.dispose();
+  }
+
+  void _scheduleFridgeCloudSync() {
+    if (!widget.stores.authService.isSignedIn) return;
+
+    _fridgeCloudSyncDebounce?.cancel();
+    _fridgeCloudSyncDebounce = Timer(_cloudSyncDelay, _uploadFridgeToCloudSilently);
+  }
+
+  Future<void> _uploadFridgeToCloudSilently() async {
+    if (_isUploadingFridgeToCloud || !widget.stores.authService.isSignedIn) return;
+
+    _isUploadingFridgeToCloud = true;
+    try {
+      await CloudFoodsService.uploadFoods(widget.stores.fridgeStore.foods);
+      debugPrint('Frigo synchronisé automatiquement avec Supabase.');
+    } catch (error) {
+      debugPrint('Synchronisation automatique du frigo impossible : $error');
+    } finally {
+      _isUploadingFridgeToCloud = false;
+    }
   }
 
   void _goToFridge() {
@@ -206,6 +241,7 @@ class _MainNavigationState extends State<MainNavigation> {
       ),
       ProfileScreen(
         store: profileStore,
+        fridgeStore: fridgeStore,
         authService: authService,
         onResetDemoData: _resetDemoData,
       ),

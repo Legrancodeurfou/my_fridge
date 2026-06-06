@@ -140,6 +140,12 @@ class FridgeStore extends ChangeNotifier {
     _save();
   }
 
+  Future<void> replaceAllFoods(List<FoodItem> foods) async {
+    _foods = _mergeDuplicates(foods);
+    notifyListeners();
+    await _save();
+  }
+
   void resetDemoData() {
     _foods = FridgeMockDataSource.fetchAll();
     notifyListeners();
