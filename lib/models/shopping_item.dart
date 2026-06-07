@@ -49,7 +49,6 @@ class ShoppingItem {
     final amount = switch (rawAmount) {
       final int value => value.toDouble(),
       final double value => value,
-      final num value => value.toDouble(),
       _ => 1.0,
     };
 

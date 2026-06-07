@@ -36,7 +36,6 @@ class TicketRawProduct {
     final amount = switch (rawAmount) {
       final int value => value.toDouble(),
       final double value => value,
-      final num value => value.toDouble(),
       _ => (quantity < 1 ? 1 : quantity).toDouble(),
     };
 

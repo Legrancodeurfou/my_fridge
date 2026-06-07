@@ -95,7 +95,6 @@ abstract final class CloudFoodsService {
     final parsed = switch (value) {
       final double number => number,
       final int number => number.toDouble(),
-      final num number => number.toDouble(),
       _ => fallback,
     };
 

@@ -841,12 +841,18 @@ class _SwitchCard extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
 
     return _CardContainer(
-      child: SwitchListTile(
-        value: value,
-        onChanged: onChanged,
-        contentPadding: EdgeInsets.zero,
-        secondary: Icon(icon, color: colorScheme.primary),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+      child: Material(
+        color: Colors.transparent,
+        child: SwitchListTile(
+          value: value,
+          onChanged: onChanged,
+          contentPadding: EdgeInsets.zero,
+          secondary: Icon(icon, color: colorScheme.primary),
+          title: Text(
+            title,
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+        ),
       ),
     );
   }
@@ -1558,11 +1564,17 @@ class _InfoCard extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
 
     return _CardContainer(
-      child: ListTile(
-        contentPadding: EdgeInsets.zero,
-        leading: Icon(icon, color: colorScheme.primary),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-        subtitle: Text(subtitle),
+      child: Material(
+        color: Colors.transparent,
+        child: ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: Icon(icon, color: colorScheme.primary),
+          title: Text(
+            title,
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+          subtitle: Text(subtitle),
+        ),
       ),
     );
   }

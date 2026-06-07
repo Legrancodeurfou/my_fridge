@@ -773,8 +773,6 @@ abstract final class RecipeCatalog {
     RecipeSuggestion recipe,
     List<FoodItem> foods,
   ) {
-    final foodNames = foods.map((food) => food.name.toLowerCase()).toList();
-
     return recipe.requiredIngredients.map((ingredient) {
       for (final food in foods) {
         final name = food.name.toLowerCase();

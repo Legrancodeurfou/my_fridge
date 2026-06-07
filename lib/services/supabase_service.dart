@@ -25,7 +25,7 @@ abstract final class SupabaseService {
     try {
       await Supabase.initialize(
         url: url,
-        anonKey: anonKey,
+        publishableKey: anonKey,
       );
       _initialized = true;
     } catch (_) {

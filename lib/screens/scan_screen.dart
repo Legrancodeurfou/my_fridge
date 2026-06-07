@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/foundation.dart';
@@ -71,24 +69,30 @@ class _ScanScreenState extends State<ScanScreen> {
                         ),
                   ),
                   const SizedBox(height: 16),
-                  ListTile(
-                    leading: const Icon(Icons.photo_camera_outlined),
-                    title: const Text('Prendre une photo'),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                  Material(
+                    color: Colors.transparent,
+                    child: ListTile(
+                      leading: const Icon(Icons.photo_camera_outlined),
+                      title: const Text('Prendre une photo'),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      onTap: () =>
+                          Navigator.pop(sheetContext, ImageSource.camera),
                     ),
-                    onTap: () =>
-                        Navigator.pop(sheetContext, ImageSource.camera),
                   ),
                   const SizedBox(height: 8),
-                  ListTile(
-                    leading: const Icon(Icons.photo_library_outlined),
-                    title: const Text('Choisir dans la galerie'),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                  Material(
+                    color: Colors.transparent,
+                    child: ListTile(
+                      leading: const Icon(Icons.photo_library_outlined),
+                      title: const Text('Choisir dans la galerie'),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      onTap: () =>
+                          Navigator.pop(sheetContext, ImageSource.gallery),
                     ),
-                    onTap: () =>
-                        Navigator.pop(sheetContext, ImageSource.gallery),
                   ),
                 ],
               ),
@@ -1494,7 +1498,7 @@ class _ManualFoodFormSheetState extends State<_ManualFoodFormSheet> {
                 ),
                 const SizedBox(height: 14),
                 DropdownButtonFormField<FoodCategory>(
-                  value: _category,
+                  initialValue: _category,
                   decoration: const InputDecoration(
                     labelText: 'Catégorie',
                     prefixIcon: Icon(Icons.category_rounded),
@@ -1525,7 +1529,7 @@ class _ManualFoodFormSheetState extends State<_ManualFoodFormSheet> {
                     SizedBox(
                       width: 130,
                       child: DropdownButtonFormField<String>(
-                        value: _unit,
+                        initialValue: _unit,
                         decoration: const InputDecoration(labelText: 'Unité'),
                         items: MeasurementHelper.units.map((unit) {
                           return DropdownMenuItem(

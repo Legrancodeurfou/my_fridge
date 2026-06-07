@@ -55,7 +55,7 @@ class MyApp extends StatelessWidget {
             );
           }
 
-          return MainNavigation(stores: snapshot.data!);
+          return _MainNavigation(stores: snapshot.data!);
         },
       ),
     );
@@ -139,16 +139,16 @@ class _LoadingScreen extends StatelessWidget {
   }
 }
 
-class MainNavigation extends StatefulWidget {
-  const MainNavigation({super.key, required this.stores});
+class _MainNavigation extends StatefulWidget {
+  const _MainNavigation({required this.stores});
 
   final _AppStores stores;
 
   @override
-  State<MainNavigation> createState() => _MainNavigationState();
+  State<_MainNavigation> createState() => _MainNavigationState();
 }
 
-class _MainNavigationState extends State<MainNavigation> {
+class _MainNavigationState extends State<_MainNavigation> {
   static const _fridgeTabIndex = 1;
   static const _cloudSyncDelay = Duration(milliseconds: 1200);
 
