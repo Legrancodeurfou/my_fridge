@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/fridge_store.dart';
+import '../data/profile_store.dart';
 import '../data/scan_history_store.dart';
 import '../data/shopping_list_store.dart';
 import '../models/food.dart';
@@ -11,12 +12,14 @@ class HomeScreen extends StatelessWidget {
   const HomeScreen({
     super.key,
     required this.store,
+    required this.profileStore,
     required this.shoppingListStore,
     required this.scanHistoryStore,
     required this.onNavigateToTab,
   });
 
   final FridgeStore store;
+  final ProfileStore profileStore;
   final ShoppingListStore shoppingListStore;
   final ScanHistoryStore scanHistoryStore;
   final void Function(int tabIndex) onNavigateToTab;
@@ -31,11 +34,13 @@ class HomeScreen extends StatelessWidget {
     return ListenableBuilder(
       listenable: Listenable.merge([
         store,
+        profileStore,
         shoppingListStore,
         scanHistoryStore,
       ]),
       builder: (context, _) => _HomeContent(
         foods: store.foods,
+        profile: profileStore.profile,
         shoppingItemsCount: shoppingListStore.items.length,
         checkedShoppingItemsCount:
             shoppingListStore.items.where((item) => item.isChecked).length,
@@ -51,6 +56,7 @@ class HomeScreen extends StatelessWidget {
 class _HomeContent extends StatelessWidget {
   const _HomeContent({
     required this.foods,
+    required this.profile,
     required this.shoppingItemsCount,
     required this.checkedShoppingItemsCount,
     required this.latestScan,
@@ -58,6 +64,7 @@ class _HomeContent extends StatelessWidget {
   });
 
   final List<FoodItem> foods;
+  final ProfileData profile;
   final int shoppingItemsCount;
   final int checkedShoppingItemsCount;
   final ScanHistoryItem? latestScan;
@@ -71,14 +78,25 @@ class _HomeContent extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final stats = FridgeStats.fromItems(foods);
-    final recipeCount = RecipeCatalog.suggestFor(foods).length;
+    final suggestedRecipes = RecipeCatalog.suggestFor(
+      foods,
+      profile: profile,
+    );
+    final feasibleRecipeCount = suggestedRecipes
+        .where(
+          (recipe) => RecipeCatalog.matchIngredients(recipe, foods)
+              .every((match) => match.isAvailable),
+        )
+        .length;
     final expiringSoonFoods = _expiringSoonFoods(foods);
     final smartActions = _buildSmartActions(
       context: context,
       stats: stats,
-      recipeCount: recipeCount,
+      feasibleRecipeCount: feasibleRecipeCount,
+      suggestedRecipeCount: suggestedRecipes.length,
       expiringSoonFoods: expiringSoonFoods,
     );
+    final firstName = profile.name.trim();
 
     return Scaffold(
       backgroundColor: colorScheme.surfaceContainerLowest,
@@ -93,7 +111,7 @@ class _HomeContent extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
         children: [
           Text(
-            'Bonjour Esteban 👋',
+            firstName.isEmpty ? 'Bonjour 👋' : 'Bonjour $firstName 👋',
             style: theme.textTheme.headlineMedium?.copyWith(
               fontWeight: FontWeight.w800,
               letterSpacing: -0.3,
@@ -110,7 +128,7 @@ class _HomeContent extends StatelessWidget {
           _SummaryStatsCard(
             totalFoods: stats.total,
             expiringSoon: stats.expiringSoon,
-            recipeCount: recipeCount,
+            recipeCount: feasibleRecipeCount,
             shoppingCount: _pendingShoppingItemsCount,
           ),
           if (smartActions.isNotEmpty) ...[
@@ -147,6 +165,20 @@ class _HomeContent extends StatelessWidget {
             color: const Color(0xFF00897B),
             onTap: () => onNavigateToTab(HomeScreen.scanTabIndex),
           ),
+          const SizedBox(height: 12),
+          _QuickActionCard(
+            icon: Icons.restaurant_menu_rounded,
+            title: 'Voir les recettes',
+            subtitle: feasibleRecipeCount > 0
+                ? '$feasibleRecipeCount recette'
+                    '${feasibleRecipeCount > 1 ? 's' : ''} faisable'
+                    '${feasibleRecipeCount > 1 ? 's' : ''} maintenant'
+                : suggestedRecipes.isEmpty
+                    ? 'Ajoute des aliments non expirés pour obtenir des idées'
+                    : 'Découvre les idées à compléter avec quelques ingrédients',
+            color: const Color(0xFF43A047),
+            onTap: () => onNavigateToTab(HomeScreen.recipesTabIndex),
+          ),
           if (expiringSoonFoods.isNotEmpty) ...[
             const SizedBox(height: 28),
             _SectionHeader(
@@ -170,7 +202,8 @@ class _HomeContent extends StatelessWidget {
   List<Widget> _buildSmartActions({
     required BuildContext context,
     required FridgeStats stats,
-    required int recipeCount,
+    required int feasibleRecipeCount,
+    required int suggestedRecipeCount,
     required List<FoodItem> expiringSoonFoods,
   }) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -200,13 +233,26 @@ class _HomeContent extends StatelessWidget {
       );
     }
 
-    if (recipeCount > 0) {
+    if (feasibleRecipeCount > 0) {
       actions.add(
         _SmartActionCard(
           icon: Icons.restaurant_menu_rounded,
-          title: '$recipeCount recette${recipeCount > 1 ? 's' : ''} possible${recipeCount > 1 ? 's' : ''}',
-          subtitle: 'Cuisine avec ce que tu as déjà dans ton frigo.',
+          title: '$feasibleRecipeCount recette'
+              '${feasibleRecipeCount > 1 ? 's' : ''} faisable'
+              '${feasibleRecipeCount > 1 ? 's' : ''} maintenant',
+          subtitle: 'Tous les ingrédients nécessaires sont disponibles.',
           color: const Color(0xFF43A047),
+          onTap: () => onNavigateToTab(HomeScreen.recipesTabIndex),
+        ),
+      );
+    } else if (suggestedRecipeCount > 0) {
+      actions.add(
+        _SmartActionCard(
+          icon: Icons.restaurant_menu_rounded,
+          title: 'Des idées recettes à compléter',
+          subtitle:
+              'Aucune recette n’est entièrement faisable pour l’instant.',
+          color: const Color(0xFFEF6C00),
           onTap: () => onNavigateToTab(HomeScreen.recipesTabIndex),
         ),
       );
@@ -261,7 +307,7 @@ class _HomeContent extends StatelessWidget {
   List<FoodItem> _expiringSoonFoods(List<FoodItem> items) {
     final urgent = items.where((food) {
       final days = ExpiryHelper.daysUntilExpiry(food.expiryDate);
-      return days < 3;
+      return days >= 0 && days < 3;
     }).toList();
 
     urgent.sort(
@@ -378,7 +424,7 @@ class _SummaryStatsCard extends StatelessWidget {
             child: _StatColumn(
               icon: Icons.restaurant_menu_outlined,
               value: recipeCount.toString(),
-              label: 'Recettes',
+              label: 'Faisables',
               color: const Color(0xFF43A047),
             ),
           ),

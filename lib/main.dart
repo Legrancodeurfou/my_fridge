@@ -454,6 +454,7 @@ class _MainNavigationState extends State<_MainNavigation> {
     final screens = [
       HomeScreen(
         store: fridgeStore,
+        profileStore: profileStore,
         shoppingListStore: shoppingListStore,
         scanHistoryStore: scanHistoryStore,
         onNavigateToTab: _goToTab,
