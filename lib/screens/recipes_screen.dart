@@ -16,6 +16,7 @@ class RecipesScreen extends StatelessWidget {
     required this.shoppingListStore,
     required this.favoriteRecipesStore,
     required this.recipeNotesStore,
+    required this.onNavigateToShoppingList,
   });
 
   final FridgeStore store;
@@ -23,6 +24,7 @@ class RecipesScreen extends StatelessWidget {
   final ShoppingListStore shoppingListStore;
   final FavoriteRecipesStore favoriteRecipesStore;
   final RecipeNotesStore recipeNotesStore;
+  final VoidCallback onNavigateToShoppingList;
 
   @override
   Widget build(BuildContext context) {
@@ -40,6 +42,7 @@ class RecipesScreen extends StatelessWidget {
         shoppingListStore: shoppingListStore,
         favoriteRecipesStore: favoriteRecipesStore,
         recipeNotesStore: recipeNotesStore,
+        onNavigateToShoppingList: onNavigateToShoppingList,
       ),
     );
   }
@@ -52,6 +55,7 @@ class _RecipesContent extends StatelessWidget {
     required this.shoppingListStore,
     required this.favoriteRecipesStore,
     required this.recipeNotesStore,
+    required this.onNavigateToShoppingList,
   });
 
   final FridgeStore store;
@@ -59,6 +63,7 @@ class _RecipesContent extends StatelessWidget {
   final ShoppingListStore shoppingListStore;
   final FavoriteRecipesStore favoriteRecipesStore;
   final RecipeNotesStore recipeNotesStore;
+  final VoidCallback onNavigateToShoppingList;
 
   @override
   Widget build(BuildContext context) {
@@ -132,6 +137,7 @@ class _RecipesContent extends StatelessWidget {
                         shoppingListStore: shoppingListStore,
                         favoriteRecipesStore: favoriteRecipesStore,
                         recipeNotesStore: recipeNotesStore,
+                        onNavigateToShoppingList: onNavigateToShoppingList,
                       ),
                     ),
                   ),
@@ -173,6 +179,7 @@ class _RecipesContent extends StatelessWidget {
                       shoppingListStore: shoppingListStore,
                       favoriteRecipesStore: favoriteRecipesStore,
                       recipeNotesStore: recipeNotesStore,
+                      onNavigateToShoppingList: onNavigateToShoppingList,
                     ),
                   if (almostFeasibleRecipes.isNotEmpty)
                     _RecipeGroup(
@@ -186,6 +193,7 @@ class _RecipesContent extends StatelessWidget {
                       shoppingListStore: shoppingListStore,
                       favoriteRecipesStore: favoriteRecipesStore,
                       recipeNotesStore: recipeNotesStore,
+                      onNavigateToShoppingList: onNavigateToShoppingList,
                     ),
                   if (otherRecipes.isNotEmpty)
                     _RecipeGroup(
@@ -199,6 +207,7 @@ class _RecipesContent extends StatelessWidget {
                       shoppingListStore: shoppingListStore,
                       favoriteRecipesStore: favoriteRecipesStore,
                       recipeNotesStore: recipeNotesStore,
+                      onNavigateToShoppingList: onNavigateToShoppingList,
                     ),
                 ],
               ],
@@ -1029,6 +1038,7 @@ class _RecipeGroup extends StatelessWidget {
     required this.shoppingListStore,
     required this.favoriteRecipesStore,
     required this.recipeNotesStore,
+    required this.onNavigateToShoppingList,
   });
 
   final String title;
@@ -1040,6 +1050,7 @@ class _RecipeGroup extends StatelessWidget {
   final ShoppingListStore shoppingListStore;
   final FavoriteRecipesStore favoriteRecipesStore;
   final RecipeNotesStore recipeNotesStore;
+  final VoidCallback onNavigateToShoppingList;
 
   @override
   Widget build(BuildContext context) {
@@ -1080,6 +1091,7 @@ class _RecipeGroup extends StatelessWidget {
                 shoppingListStore: shoppingListStore,
                 favoriteRecipesStore: favoriteRecipesStore,
                 recipeNotesStore: recipeNotesStore,
+                onNavigateToShoppingList: onNavigateToShoppingList,
               ),
             ),
           ),
@@ -1209,6 +1221,7 @@ class _RecipeCard extends StatelessWidget {
     required this.shoppingListStore,
     required this.favoriteRecipesStore,
     required this.recipeNotesStore,
+    required this.onNavigateToShoppingList,
   });
 
   final RecipeSuggestion recipe;
@@ -1216,6 +1229,7 @@ class _RecipeCard extends StatelessWidget {
   final ShoppingListStore shoppingListStore;
   final FavoriteRecipesStore favoriteRecipesStore;
   final RecipeNotesStore recipeNotesStore;
+  final VoidCallback onNavigateToShoppingList;
 
   void _showRecipeDetails(BuildContext context) {
     showModalBottomSheet<void>(
@@ -1229,6 +1243,7 @@ class _RecipeCard extends StatelessWidget {
           shoppingListStore: shoppingListStore,
           favoriteRecipesStore: favoriteRecipesStore,
           recipeNotesStore: recipeNotesStore,
+          onNavigateToShoppingList: onNavigateToShoppingList,
         );
       },
     );
@@ -1535,6 +1550,7 @@ class _RecipeDetailSheet extends StatelessWidget {
     required this.shoppingListStore,
     required this.favoriteRecipesStore,
     required this.recipeNotesStore,
+    required this.onNavigateToShoppingList,
   });
 
   final RecipeSuggestion recipe;
@@ -1542,21 +1558,47 @@ class _RecipeDetailSheet extends StatelessWidget {
   final ShoppingListStore shoppingListStore;
   final FavoriteRecipesStore favoriteRecipesStore;
   final RecipeNotesStore recipeNotesStore;
+  final VoidCallback onNavigateToShoppingList;
 
   void _addMissingToShoppingList(BuildContext context) {
     final missingItems = RecipeCatalog.missingShoppingItems(recipe, store.foods);
     if (missingItems.isEmpty) return;
 
-    shoppingListStore.addItems(missingItems);
+    final newItems = missingItems
+        .where((item) => !shoppingListStore.containsEquivalent(item))
+        .toList();
+    final existingCount = missingItems.length - newItems.length;
+
+    if (newItems.isNotEmpty) {
+      shoppingListStore.addItems(newItems);
+    }
+
+    final message = switch ((newItems.length, existingCount)) {
+      (0, _) =>
+        'Ces ingrédients sont déjà dans ta liste de courses. '
+            'Les quantités restent inchangées.',
+      (final added, 0) =>
+        '$added ingrédient${added > 1 ? 's' : ''} '
+            'ajouté${added > 1 ? 's' : ''} à la liste de courses.',
+      (final added, final existing) =>
+        '$added ingrédient${added > 1 ? 's' : ''} '
+            'ajouté${added > 1 ? 's' : ''}. '
+            '$existing déjà présent${existing > 1 ? 's' : ''}, '
+            'quantité${existing > 1 ? 's' : ''} inchangée'
+            '${existing > 1 ? 's' : ''}.',
+    };
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        content: Text(
-          '${missingItems.length} ingrédient'
-          '${missingItems.length > 1 ? 's' : ''} ajouté'
-          '${missingItems.length > 1 ? 's' : ''} à la liste de courses.',
+        content: Text(message),
+        action: SnackBarAction(
+          label: 'Voir les courses',
+          onPressed: () {
+            Navigator.of(context).pop();
+            onNavigateToShoppingList();
+          },
         ),
       ),
     );
@@ -1913,7 +1955,8 @@ class _RecipeDetailSheet extends StatelessWidget {
                       ),
                       const SizedBox(height: 14),
                       Text(
-                        'Ajoute seulement ce qui manque. Les articles identiques déjà présents seront regroupés.',
+                        'Ajoute seulement ce qui manque. Un ingrédient déjà '
+                        'présent ne sera pas ajouté une seconde fois.',
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: colorScheme.onSurfaceVariant,
                           height: 1.4,

@@ -150,6 +150,7 @@ class _MainNavigation extends StatefulWidget {
 
 class _MainNavigationState extends State<_MainNavigation> {
   static const _fridgeTabIndex = 1;
+  static const _shoppingTabIndex = 4;
   static const _cloudSyncDelay = Duration(milliseconds: 1200);
 
   int _selectedIndex = 0;
@@ -474,6 +475,7 @@ class _MainNavigationState extends State<_MainNavigation> {
         shoppingListStore: shoppingListStore,
         favoriteRecipesStore: favoriteRecipesStore,
         recipeNotesStore: recipeNotesStore,
+        onNavigateToShoppingList: () => _goToTab(_shoppingTabIndex),
       ),
       ShoppingListScreen(
         shoppingStore: shoppingListStore,

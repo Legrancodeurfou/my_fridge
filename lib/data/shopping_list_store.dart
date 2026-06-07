@@ -14,6 +14,10 @@ class ShoppingListStore extends ChangeNotifier {
 
   List<ShoppingItem> get items => List.unmodifiable(_items);
 
+  bool containsEquivalent(ShoppingItem item) {
+    return _items.any((existingItem) => _canMerge(existingItem, item));
+  }
+
   static Future<ShoppingListStore> load() async {
     final prefs = await SharedPreferences.getInstance();
     final savedJson = prefs.getString(_storageKey);
