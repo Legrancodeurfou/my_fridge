@@ -134,8 +134,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             title: const Text('Que veux-tu faire avec tes données cloud ?'),
             content: const Text(
               'Récupérer tes données cloud remplacera les données locales '
-              'actuelles. Garder les données locales laissera la '
-              'synchronisation automatique fonctionner normalement.',
+              'actuelles. Une sauvegarde de sécurité sera créée avant la '
+              'restauration. Garder les données locales laissera la '
+              'synchronisation automatique reprendre normalement.',
             ),
             actions: [
               TextButton(
@@ -171,7 +172,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
     } catch (error) {
       if (mounted) {
-        _showSnackBar('Préparation de la synchronisation impossible : $error');
+        _showSnackBar(
+          'Le cloud est temporairement indisponible. Tes données locales '
+          'restent accessibles. Détail : $error',
+        );
       }
     } finally {
       await widget.onCloudRestoreStateChanged(false);
@@ -237,7 +241,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _uploadFridgeToCloud() async {
     if (!widget.authService.isSignedIn) {
-      _showSnackBar('Connecte-toi avec Google avant de synchroniser.');
+      _showSnackBar(
+        'Mode local actif. Connecte-toi avec Google pour sauvegarder '
+        'tes données dans le cloud.',
+      );
       return;
     }
 
@@ -246,10 +253,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       await CloudFoodsService.uploadFoods(widget.fridgeStore.foods);
       if (!mounted) return;
-      _showSnackBar('Frigo sauvegardé dans le cloud.');
+      _showSnackBar('Frigo sauvegardé dans le cloud avec succès.');
     } catch (error) {
       if (!mounted) return;
-      _showSnackBar('Sauvegarde cloud impossible : $error');
+      _showSnackBar(
+        'Le frigo n’a pas pu être sauvegardé. Tes données locales sont '
+        'conservées. Détail : $error',
+      );
     } finally {
       if (mounted) setState(() => _isSyncingFridge = false);
     }
@@ -257,7 +267,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _downloadFridgeFromCloud() async {
     if (!widget.authService.isSignedIn) {
-      _showSnackBar('Connecte-toi avec Google avant de synchroniser.');
+      _showSnackBar(
+        'Mode local actif. Connecte-toi avec Google pour récupérer '
+        'ton frigo depuis le cloud.',
+      );
       return;
     }
 
@@ -291,10 +304,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final cloudFoods = await CloudFoodsService.downloadFoods();
       await widget.fridgeStore.replaceAllFoods(cloudFoods);
       if (!mounted) return;
-      _showSnackBar('${cloudFoods.length} aliment(s) récupéré(s) depuis le cloud.');
+      _showSnackBar(
+        'Frigo restauré : ${cloudFoods.length} aliment(s) récupéré(s) '
+        'depuis le cloud.',
+      );
     } catch (error) {
       if (!mounted) return;
-      _showSnackBar('Import cloud impossible : $error');
+      _showSnackBar(
+        'Impossible de récupérer le frigo. Les données locales actuelles '
+        'sont conservées. Détail : $error',
+      );
     } finally {
       if (mounted) setState(() => _isSyncingFridge = false);
     }
@@ -304,7 +323,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (_isSyncingFridge || _isCloudOperationInProgress) return;
 
     if (!widget.authService.isSignedIn) {
-      _showSnackBar('Connecte-toi avec Google avant de restaurer tes données.');
+      _showSnackBar(
+        'Mode local actif. Connecte-toi avec Google pour récupérer '
+        'tes données cloud.',
+      );
       return;
     }
 
@@ -314,7 +336,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         return AlertDialog(
           title: const Text('Restaurer les données cloud ?'),
           content: const Text(
-            'Les données locales actuelles seront remplacées par les données sauvegardées dans Supabase.',
+            'Le frigo, les courses, les scans, les favoris et les notes '
+            'locales seront remplacés par les données sauvegardées dans '
+            'Supabase.\n\nUne sauvegarde de sécurité de l’état cloud actuel '
+            'sera créée avant la restauration.',
           ),
           actions: [
             TextButton(
@@ -353,10 +378,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
       await _downloadAllCloudDataToLocal();
 
       if (!mounted) return;
-      _showSnackBar('Tes données cloud ont été restaurées.');
+      _showSnackBar(
+        'Restauration réussie. Tes données cloud sont maintenant disponibles '
+        'dans l’application.',
+      );
     } catch (error) {
       if (!mounted) return;
-      _showSnackBar('Restauration cloud impossible : $error');
+      _showSnackBar(
+        'La restauration n’a pas pu être terminée. Tes données locales '
+        'restent accessibles. Détail : $error',
+      );
     } finally {
       if (manageAutoSyncSuspension) {
         await widget.onCloudRestoreStateChanged(false);
@@ -436,10 +467,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
       await _loadCloudBackups();
 
       if (!mounted) return;
-      _showSnackBar('Sauvegarde cloud créée.');
+      _showSnackBar(
+        'Sauvegarde cloud créée avec succès. Les 3 plus récentes sont '
+        'conservées.',
+      );
     } catch (error) {
       if (!mounted) return;
-      _showSnackBar('Création de la sauvegarde impossible : $error');
+      _showSnackBar(
+        'La sauvegarde cloud n’a pas pu être créée. Réessaie dans quelques '
+        'instants. Détail : $error',
+      );
     } finally {
       if (mounted) setState(() => _isCreatingBackup = false);
     }
@@ -458,7 +495,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         return AlertDialog(
           title: const Text('Restaurer cette sauvegarde ?'),
           content: Text(
-            'La sauvegarde du ${_formatBackupDate(backup.createdAt)} remplacera les données cloud et locales actuelles.',
+            'La sauvegarde du ${_formatBackupDate(backup.createdAt)} '
+            'remplacera les données cloud et locales actuelles.\n\nUne '
+            'sauvegarde de sécurité de l’état actuel sera créée avant la '
+            'restauration.',
           ),
           actions: [
             TextButton(
@@ -494,10 +534,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
       await _downloadAllCloudDataToLocal();
 
       if (!mounted) return;
-      _showSnackBar('Sauvegarde restaurée avec succès.');
+      _showSnackBar(
+        'Restauration réussie. La sauvegarde sélectionnée est maintenant '
+        'active sur cet appareil.',
+      );
     } catch (error) {
       if (!mounted) return;
-      _showSnackBar('Restauration de la sauvegarde impossible : $error');
+      _showSnackBar(
+        'La sauvegarde n’a pas pu être restaurée. Tes données actuelles '
+        'restent accessibles. Détail : $error',
+      );
     } finally {
       await widget.onCloudRestoreStateChanged(false);
       if (mounted) {
@@ -1040,6 +1086,16 @@ class _CloudStatusCard extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isCloudActive = authService.isAvailable && authService.isSignedIn;
+    final isSyncSuspended =
+        isRestoring || authService.isCloudOnboardingPending;
+
+    final statusMessage = !isCloudActive
+        ? 'Mode local uniquement'
+        : isRestoring
+        ? 'Synchronisation suspendue pendant la restauration'
+        : authService.isCloudOnboardingPending
+        ? 'Synchronisation suspendue en attente de ton choix'
+        : 'Synchronisation automatique active';
 
     return _CardContainer(
       child: Padding(
@@ -1061,7 +1117,7 @@ class _CloudStatusCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'État cloud',
+                    'État du cloud',
                     style: theme.textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w800,
                     ),
@@ -1069,29 +1125,53 @@ class _CloudStatusCard extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     authService.isSignedIn
-                        ? 'Connecté · ${authService.email ?? 'Compte Supabase'}'
-                        : 'Non connecté',
+                        ? 'Connecté avec ${authService.email ?? 'ton compte Google'}'
+                        : 'Mode local · non connecté',
                     style: theme.textTheme.bodyMedium?.copyWith(
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    isCloudActive
-                        ? 'Synchronisation automatique active'
-                        : 'Mode local uniquement',
+                    statusMessage,
                     style: theme.textTheme.bodyMedium?.copyWith(
+                      color: isSyncSuspended
+                          ? colorScheme.tertiary
+                          : colorScheme.onSurfaceVariant,
+                      fontWeight: isSyncSuspended
+                          ? FontWeight.w700
+                          : FontWeight.normal,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    isCloudActive
+                        ? 'Tes données sont sauvegardées automatiquement '
+                              'lorsque tu es connecté.'
+                        : 'Tes données restent enregistrées sur cet appareil. '
+                              'Connecte-toi pour activer la sauvegarde cloud.',
+                    style: theme.textTheme.bodySmall?.copyWith(
                       color: colorScheme.onSurfaceVariant,
                     ),
                   ),
                   if (isRestoring) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      'Restauration cloud en cours...',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.primary,
-                        fontWeight: FontWeight.w700,
-                      ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Restauration en cours...',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colorScheme.primary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ],
@@ -1231,7 +1311,9 @@ class _CloudRestoreCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Remplace le frigo, les courses, les scans, les favoris et les notes locales par les données sauvegardées dans Supabase.',
+                        'Récupère le frigo, les courses, les scans, les favoris '
+                        'et les notes sauvegardés. Une sauvegarde de sécurité '
+                        'est créée avant toute restauration.',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: colorScheme.onSurfaceVariant,
                         ),
@@ -1256,7 +1338,7 @@ class _CloudRestoreCard extends StatelessWidget {
                 label: Text(
                   isRestoring
                       ? 'Restauration en cours...'
-                      : 'Récupérer toutes mes données depuis le cloud',
+                      : 'Récupérer mes données cloud',
                 ),
               ),
             ),
@@ -1318,7 +1400,9 @@ class _CloudBackupsCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Conserve automatiquement les 3 dernières sauvegardes complètes.',
+                        'Seules les 3 dernières sauvegardes complètes sont '
+                        'conservées. Les plus anciennes sont supprimées '
+                        'automatiquement.',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: colorScheme.onSurfaceVariant,
                         ),
@@ -1350,7 +1434,7 @@ class _CloudBackupsCard extends StatelessWidget {
               )
             else ...[
               Text(
-                'Dernière sauvegarde',
+                'Dernière sauvegarde disponible',
                 style: theme.textTheme.labelLarge?.copyWith(
                   color: colorScheme.primary,
                   fontWeight: FontWeight.w800,
@@ -1449,40 +1533,53 @@ class _CloudBackupTile extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(Icons.history_rounded, color: colorScheme.onSurfaceVariant),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                _formatBackupDate(backup.createdAt),
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+        Row(
+          children: [
+            Icon(Icons.history_rounded, color: colorScheme.onSurfaceVariant),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _formatBackupDate(backup.createdAt),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    backup.reason,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 2),
-              Text(
-                backup.reason,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
-        IconButton(
-          onPressed: isBusy ? null : onRestore,
-          tooltip: 'Restaurer cette sauvegarde',
-          icon: isRestoring
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.restore_rounded),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: isBusy ? null : onRestore,
+            icon: isRestoring
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.restore_rounded),
+            label: Text(
+              isRestoring
+                  ? 'Restauration en cours...'
+                  : 'Restaurer une sauvegarde',
+            ),
+          ),
         ),
       ],
     );
