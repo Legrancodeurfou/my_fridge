@@ -27,7 +27,13 @@ class RecipesScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: Listenable.merge([store, profileStore, shoppingListStore, favoriteRecipesStore]),
+      listenable: Listenable.merge([
+        store,
+        profileStore,
+        shoppingListStore,
+        favoriteRecipesStore,
+        recipeNotesStore,
+      ]),
       builder: (context, _) => _RecipesContent(
         store: store,
         profileStore: profileStore,
@@ -64,6 +70,28 @@ class _RecipesContent extends StatelessWidget {
     final favoriteRecipes = RecipeCatalog.favoriteRecipesFor(
       favoriteRecipesStore.favoriteNames,
     );
+    final feasibleRecipes = recipes
+        .where(
+          (recipe) => RecipeCatalog.matchIngredients(recipe, foods)
+              .every((match) => match.isAvailable),
+        )
+        .toList();
+    final almostFeasibleRecipes = recipes
+        .where(
+          (recipe) => RecipeCatalog.matchIngredients(recipe, foods)
+                  .where((match) => !match.isAvailable)
+                  .length ==
+              1,
+        )
+        .toList();
+    final otherRecipes = recipes
+        .where(
+          (recipe) => RecipeCatalog.matchIngredients(recipe, foods)
+                  .where((match) => !match.isAvailable)
+                  .length >
+              1,
+        )
+        .toList();
 
     return Scaffold(
       backgroundColor: colorScheme.surfaceContainerLowest,
@@ -133,18 +161,45 @@ class _RecipesContent extends StatelessWidget {
                   const SizedBox(height: 12),
                   _ProfileRecipeBanner(profile: profile),
                   const SizedBox(height: 20),
-                  ...recipes.map(
-                    (recipe) => Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: _RecipeCard(
-                        recipe: recipe,
-                        store: store,
-                        shoppingListStore: shoppingListStore,
-                        favoriteRecipesStore: favoriteRecipesStore,
-                        recipeNotesStore: recipeNotesStore,
-                      ),
+                  if (feasibleRecipes.isNotEmpty)
+                    _RecipeGroup(
+                      title: 'Faisables maintenant',
+                      helpText:
+                          'Tu as les quantités nécessaires dans ton frigo.',
+                      icon: Icons.check_circle_rounded,
+                      color: const Color(0xFF2E7D32),
+                      recipes: feasibleRecipes,
+                      store: store,
+                      shoppingListStore: shoppingListStore,
+                      favoriteRecipesStore: favoriteRecipesStore,
+                      recipeNotesStore: recipeNotesStore,
                     ),
-                  ),
+                  if (almostFeasibleRecipes.isNotEmpty)
+                    _RecipeGroup(
+                      title: 'Presque faisables',
+                      helpText:
+                          'Il ne manque qu’un ingrédient pour ces recettes.',
+                      icon: Icons.auto_awesome_rounded,
+                      color: const Color(0xFFEF6C00),
+                      recipes: almostFeasibleRecipes,
+                      store: store,
+                      shoppingListStore: shoppingListStore,
+                      favoriteRecipesStore: favoriteRecipesStore,
+                      recipeNotesStore: recipeNotesStore,
+                    ),
+                  if (otherRecipes.isNotEmpty)
+                    _RecipeGroup(
+                      title: 'Autres idées',
+                      helpText:
+                          'Complète ta liste de courses pour les préparer.',
+                      icon: Icons.lightbulb_outline_rounded,
+                      color: colorScheme.primary,
+                      recipes: otherRecipes,
+                      store: store,
+                      shoppingListStore: shoppingListStore,
+                      favoriteRecipesStore: favoriteRecipesStore,
+                      recipeNotesStore: recipeNotesStore,
+                    ),
                 ],
               ],
             ),
@@ -938,6 +993,151 @@ abstract final class RecipeCatalog {
 // Composants UI
 // ---------------------------------------------------------------------------
 
+class _RecipeGroup extends StatelessWidget {
+  const _RecipeGroup({
+    required this.title,
+    required this.helpText,
+    required this.icon,
+    required this.color,
+    required this.recipes,
+    required this.store,
+    required this.shoppingListStore,
+    required this.favoriteRecipesStore,
+    required this.recipeNotesStore,
+  });
+
+  final String title;
+  final String helpText;
+  final IconData icon;
+  final Color color;
+  final List<RecipeSuggestion> recipes;
+  final FridgeStore store;
+  final ShoppingListStore shoppingListStore;
+  final FavoriteRecipesStore favoriteRecipesStore;
+  final RecipeNotesStore recipeNotesStore;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 20, color: color),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            helpText,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 12),
+          ...recipes.map(
+            (recipe) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _RecipeCard(
+                recipe: recipe,
+                store: store,
+                shoppingListStore: shoppingListStore,
+                favoriteRecipesStore: favoriteRecipesStore,
+                recipeNotesStore: recipeNotesStore,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+FoodItem? _foodForMatch(
+  RecipeIngredientMatch match,
+  List<FoodItem> foods,
+) {
+  final foodId = match.matchedFoodId;
+  if (foodId == null) return null;
+
+  for (final food in foods) {
+    if (food.id == foodId) return food;
+  }
+  return null;
+}
+
+bool _isExpiringSoon(
+  RecipeIngredientMatch match,
+  List<FoodItem> foods,
+) {
+  if (!match.isAvailable) return false;
+
+  final food = _foodForMatch(match, foods);
+  if (food == null) return false;
+
+  final days = ExpiryHelper.daysUntilExpiry(food.expiryDate);
+  return days >= 0 && days < 3;
+}
+
+String _joinedIngredientNames(List<RecipeIngredientMatch> matches) {
+  return matches
+      .map((match) => match.matchedFoodName ?? match.ingredient.label)
+      .toSet()
+      .join(', ');
+}
+
+enum _IngredientStatus { available, missing, expiringSoon }
+
+class _RecipeBadge extends StatelessWidget {
+  const _RecipeBadge({
+    required this.label,
+    required this.icon,
+    required this.color,
+  });
+
+  final String label;
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.11),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.28)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: color,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _ProfileRecipeBanner extends StatelessWidget {
   const _ProfileRecipeBanner({required this.profile});
@@ -1015,8 +1215,19 @@ class _RecipeCard extends StatelessWidget {
     final colorScheme = theme.colorScheme;
     final foods = store.foods;
     final matches = RecipeCatalog.matchIngredients(recipe, foods);
-    final availableCount = matches.where((item) => item.isAvailable).length;
+    final available = matches.where((item) => item.isAvailable).toList();
+    final missing = matches.where((item) => !item.isAvailable).toList();
+    final expiringSoon =
+        available.where((match) => _isExpiringSoon(match, foods)).toList();
     final isFavorite = favoriteRecipesStore.isFavorite(recipe.name);
+    final hasNote = recipeNotesStore.hasNoteFor(recipe.name);
+    final availabilityLabel = missing.isEmpty
+        ? 'Faisable maintenant'
+        : missing.length == 1
+            ? 'Presque faisable'
+            : '${missing.length} ingrédients manquants';
+    final availabilityColor =
+        missing.isEmpty ? const Color(0xFF2E7D32) : const Color(0xFFEF6C00);
 
     return Material(
       color: colorScheme.surface,
@@ -1073,24 +1284,6 @@ class _RecipeCard extends StatelessWidget {
                               letterSpacing: -0.2,
                             ),
                           ),
-                          const SizedBox(height: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: colorScheme.primary.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(
-                              'Avec ton frigo · $availableCount/${matches.length}',
-                              style: theme.textTheme.labelMedium?.copyWith(
-                                color: colorScheme.primary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
                         ],
                       ),
                     ),
@@ -1130,6 +1323,79 @@ class _RecipeCard extends StatelessWidget {
                     ),
                   ],
                 ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 7,
+                  runSpacing: 7,
+                  children: [
+                    _RecipeBadge(
+                      label: availabilityLabel,
+                      icon: missing.isEmpty
+                          ? Icons.check_circle_outline_rounded
+                          : Icons.shopping_basket_outlined,
+                      color: availabilityColor,
+                    ),
+                    if (expiringSoon.isNotEmpty)
+                      const _RecipeBadge(
+                        label: 'Bientôt périmé',
+                        icon: Icons.schedule_rounded,
+                        color: Color(0xFFEF6C00),
+                      ),
+                    if (isFavorite)
+                      const _RecipeBadge(
+                        label: 'Favori',
+                        icon: Icons.favorite_rounded,
+                        color: Color(0xFFE53935),
+                      ),
+                    if (hasNote)
+                      _RecipeBadge(
+                        label: 'Note existante',
+                        icon: Icons.edit_note_rounded,
+                        color: colorScheme.primary,
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  available.isEmpty
+                      ? 'Cette idée complète ton catalogue, mais aucun ingrédient requis n’est encore disponible.'
+                      : 'Utilise depuis ton frigo : ${_joinedIngredientNames(available)}.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                    height: 1.4,
+                  ),
+                ),
+                if (missing.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'À prévoir : ${missing.map((match) => match.ingredient.label).join(', ')}.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+                if (expiringSoon.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEF6C00).withValues(alpha: 0.09),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      'Bonne option pour éviter le gaspillage : '
+                      '${_joinedIngredientNames(expiringSoon)} '
+                      '${expiringSoon.length > 1 ? 'sont à utiliser bientôt' : 'est à utiliser bientôt'}.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: const Color(0xFFB45309),
+                        fontWeight: FontWeight.w700,
+                        height: 1.35,
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 14),
                 Text(
                   'Ingrédients',
@@ -1146,7 +1412,11 @@ class _RecipeCard extends StatelessWidget {
                       .map(
                         (match) => _IngredientChip(
                           label: match.chipLabel,
-                          isAvailable: match.isAvailable,
+                          status: !match.isAvailable
+                              ? _IngredientStatus.missing
+                              : _isExpiringSoon(match, foods)
+                                  ? _IngredientStatus.expiringSoon
+                                  : _IngredientStatus.available,
                         ),
                       )
                       .toList(),
@@ -1177,16 +1447,30 @@ class _RecipeCard extends StatelessWidget {
 class _IngredientChip extends StatelessWidget {
   const _IngredientChip({
     required this.label,
-    required this.isAvailable,
+    required this.status,
   });
 
   final String label;
-  final bool isAvailable;
+  final _IngredientStatus status;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final color = isAvailable ? const Color(0xFF43A047) : const Color(0xFFE53935);
+    final color = switch (status) {
+      _IngredientStatus.available => const Color(0xFF2E7D32),
+      _IngredientStatus.missing => const Color(0xFFC62828),
+      _IngredientStatus.expiringSoon => const Color(0xFFEF6C00),
+    };
+    final icon = switch (status) {
+      _IngredientStatus.available => Icons.check_circle_outline_rounded,
+      _IngredientStatus.missing => Icons.remove_circle_outline_rounded,
+      _IngredientStatus.expiringSoon => Icons.schedule_rounded,
+    };
+    final statusLabel = switch (status) {
+      _IngredientStatus.available => 'Disponible',
+      _IngredientStatus.missing => 'Manquant',
+      _IngredientStatus.expiringSoon => 'Bientôt périmé',
+    };
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -1199,13 +1483,13 @@ class _IngredientChip extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            isAvailable ? Icons.check_circle_outline : Icons.cancel_outlined,
+            icon,
             size: 14,
             color: color,
           ),
           const SizedBox(width: 4),
           Text(
-            label,
+            '$statusLabel · $label',
             style: theme.textTheme.bodySmall?.copyWith(
               fontWeight: FontWeight.w600,
               color: color,
@@ -1244,7 +1528,11 @@ class _RecipeDetailSheet extends StatelessWidget {
       SnackBar(
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        content: const Text('Ingrédients ajoutés à la liste de courses'),
+        content: Text(
+          '${missingItems.length} ingrédient'
+          '${missingItems.length > 1 ? 's' : ''} ajouté'
+          '${missingItems.length > 1 ? 's' : ''} à la liste de courses.',
+        ),
       ),
     );
   }
@@ -1255,18 +1543,20 @@ class _RecipeDetailSheet extends StatelessWidget {
         .where((match) => match.isAvailable)
         .toList();
     final consumptionAmounts = RecipeCatalog.consumptionAmounts(recipe, foods);
+    final messenger = ScaffoldMessenger.of(sheetContext);
 
     final choice = await showDialog<_CookedChoice>(
       context: sheetContext,
       builder: (dialogContext) {
         return AlertDialog(
-          title: const Text('Ingrédients utilisés'),
+          title: const Text('Mettre le frigo à jour ?'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Veux-tu retirer du frigo les ingrédients utilisés ?',
+                'Tu peux maintenant déduire les quantités utilisées. '
+                'Aucun aliment ne sera modifié sans ta confirmation.',
               ),
               if (availableMatches.isNotEmpty) ...[
                 const SizedBox(height: 16),
@@ -1293,13 +1583,13 @@ class _RecipeDetailSheet extends StatelessWidget {
             TextButton(
               onPressed: () =>
                   Navigator.pop(dialogContext, _CookedChoice.keep),
-              child: const Text('Non, garder les aliments'),
+              child: const Text('Garder le frigo tel quel'),
             ),
             FilledButton(
               onPressed: consumptionAmounts.isEmpty
                   ? null
                   : () => Navigator.pop(dialogContext, _CookedChoice.remove),
-              child: const Text('Oui, retirer du frigo'),
+              child: const Text('Déduire les quantités'),
             ),
           ],
         );
@@ -1314,13 +1604,11 @@ class _RecipeDetailSheet extends StatelessWidget {
 
     if (sheetContext.mounted) Navigator.pop(sheetContext);
 
-    if (!sheetContext.mounted) return;
-
     final message = choice == _CookedChoice.remove
         ? 'Bon appétit ! Les quantités utilisées ont été retirées du frigo.'
-        : 'Bon appétit ! « ${recipe.name} » est noté.';
+        : 'Bon appétit ! Le frigo reste inchangé.';
 
-    ScaffoldMessenger.of(sheetContext).showSnackBar(
+    messenger.showSnackBar(
       SnackBar(
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1337,7 +1625,10 @@ class _RecipeDetailSheet extends StatelessWidget {
     final matches = RecipeCatalog.matchIngredients(recipe, foods);
     final available = matches.where((item) => item.isAvailable).toList();
     final missing = matches.where((item) => !item.isAvailable).toList();
+    final expiringSoon =
+        available.where((match) => _isExpiringSoon(match, foods)).toList();
     final isFavorite = favoriteRecipesStore.isFavorite(recipe.name);
+    final hasNote = recipeNotesStore.hasNoteFor(recipe.name);
 
     return Container(
       constraints: BoxConstraints(
@@ -1447,6 +1738,102 @@ class _RecipeDetailSheet extends StatelessWidget {
                         color: colorScheme.onSurfaceVariant,
                       ),
                     ),
+                    const SizedBox(height: 14),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _RecipeBadge(
+                          label: missing.isEmpty
+                              ? 'Faisable maintenant'
+                              : missing.length == 1
+                                  ? 'Presque faisable'
+                                  : '${missing.length} ingrédients manquants',
+                          icon: missing.isEmpty
+                              ? Icons.check_circle_outline_rounded
+                              : Icons.shopping_basket_outlined,
+                          color: missing.isEmpty
+                              ? const Color(0xFF2E7D32)
+                              : const Color(0xFFEF6C00),
+                        ),
+                        if (expiringSoon.isNotEmpty)
+                          const _RecipeBadge(
+                            label: 'Anti-gaspillage',
+                            icon: Icons.eco_outlined,
+                            color: Color(0xFFEF6C00),
+                          ),
+                        if (isFavorite)
+                          const _RecipeBadge(
+                            label: 'Favori',
+                            icon: Icons.favorite_rounded,
+                            color: Color(0xFFE53935),
+                          ),
+                        if (hasNote)
+                          _RecipeBadge(
+                            label: 'Note existante',
+                            icon: Icons.edit_note_rounded,
+                            color: colorScheme.primary,
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primary.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Text(
+                        available.isEmpty
+                            ? 'Pourquoi cette idée ? Elle correspond à un aliment repéré dans ton frigo, mais les quantités requises ne sont pas encore disponibles.'
+                            : missing.isEmpty
+                                ? 'Pourquoi cette recette ? Tous les ingrédients requis sont disponibles dans ton frigo.'
+                                : 'Pourquoi cette recette ? Elle utilise ${_joinedIngredientNames(available)} et il ne manque que ${missing.map((match) => match.ingredient.label).join(', ')}.',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurface,
+                          height: 1.4,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    if (expiringSoon.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color:
+                              const Color(0xFFEF6C00).withValues(alpha: 0.09),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: const Color(0xFFEF6C00)
+                                .withValues(alpha: 0.25),
+                          ),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(
+                              Icons.eco_outlined,
+                              color: Color(0xFFEF6C00),
+                              size: 20,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'Bonne option pour éviter le gaspillage : '
+                                '${_joinedIngredientNames(expiringSoon)} '
+                                '${expiringSoon.length > 1 ? 'sont bientôt périmés' : 'est bientôt périmé'}.',
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: const Color(0xFFB45309),
+                                  fontWeight: FontWeight.w700,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 24),
                     Text(
                       'Depuis ton frigo',
@@ -1470,7 +1857,9 @@ class _RecipeDetailSheet extends StatelessWidget {
                             .map(
                               (match) => _IngredientChip(
                                 label: match.fridgeDisplayLabel,
-                                isAvailable: true,
+                                status: _isExpiringSoon(match, foods)
+                                    ? _IngredientStatus.expiringSoon
+                                    : _IngredientStatus.available,
                               ),
                             )
                             .toList(),
@@ -1492,16 +1881,28 @@ class _RecipeDetailSheet extends StatelessWidget {
                             .map(
                               (match) => _IngredientChip(
                                 label: match.chipLabel,
-                                isAvailable: false,
+                                status: _IngredientStatus.missing,
                               ),
                             )
                             .toList(),
                       ),
                       const SizedBox(height: 14),
+                      Text(
+                        'Ajoute seulement ce qui manque. Les articles identiques déjà présents seront regroupés.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                          height: 1.4,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
                       FilledButton.tonalIcon(
                         onPressed: () => _addMissingToShoppingList(context),
                         icon: const Icon(Icons.shopping_cart_outlined),
-                        label: const Text('Ajouter les manquants à ma liste de courses'),
+                        label: Text(
+                          'Ajouter ${missing.length} ingrédient'
+                          '${missing.length > 1 ? 's' : ''} manquant'
+                          '${missing.length > 1 ? 's' : ''}',
+                        ),
                         style: FilledButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
@@ -1535,16 +1936,29 @@ class _RecipeDetailSheet extends StatelessWidget {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-              child: FilledButton.icon(
-                onPressed: () => _onCooked(context),
-                icon: const Icon(Icons.restaurant_rounded),
-                label: const Text('J’ai cuisiné'),
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Après cuisson, tu pourras choisir de déduire les quantités utilisées du frigo.',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 8),
+                  FilledButton.icon(
+                    onPressed: () => _onCooked(context),
+                    icon: const Icon(Icons.restaurant_rounded),
+                    label: const Text('J’ai cuisiné · gérer mon frigo'),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
