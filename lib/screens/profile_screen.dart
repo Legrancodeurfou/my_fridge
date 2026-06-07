@@ -118,8 +118,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _showCloudOnboarding(String userId) async {
+    if (_isCloudOnboardingInProgress) return;
+
     _isCloudOnboardingInProgress = true;
-    var choiceWasMade = false;
+    var shouldCompleteOnboarding = false;
 
     try {
       await widget.onCloudRestoreStateChanged(true);
@@ -165,10 +167,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
         },
       );
 
-      choiceWasMade = choice != null;
-
-      if (choice == _CloudOnboardingChoice.restoreCloud && mounted) {
-        await _performGlobalCloudRestore(manageAutoSyncSuspension: false);
+      if (choice == _CloudOnboardingChoice.keepLocal) {
+        shouldCompleteOnboarding = true;
+      } else if (choice == _CloudOnboardingChoice.restoreCloud && mounted) {
+        shouldCompleteOnboarding = await _performGlobalCloudRestore(
+          manageAutoSyncSuspension: false,
+        );
+      } else if (choice == _CloudOnboardingChoice.later && mounted) {
+        _showSnackBar(
+          'Synchronisation suspendue. Tu pourras reprendre ce choix depuis '
+          'la carte « État du cloud ».',
+        );
       }
     } catch (error) {
       if (mounted) {
@@ -179,12 +188,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
     } finally {
       await widget.onCloudRestoreStateChanged(false);
-      if (choiceWasMade && widget.authService.userId == userId) {
+      if (shouldCompleteOnboarding &&
+          widget.authService.userId == userId) {
         widget.authService.completeCloudOnboarding();
       }
       _isCloudOnboardingInProgress = false;
       if (mounted) setState(() {});
     }
+  }
+
+  void _resumeCloudOnboarding() {
+    final userId = widget.authService.userId;
+    if (userId == null || _isCloudOnboardingInProgress) return;
+
+    unawaited(_showCloudOnboarding(userId));
   }
 
   Future<void> _loadCloudBackups() async {
@@ -360,7 +377,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     await _performGlobalCloudRestore(manageAutoSyncSuspension: true);
   }
 
-  Future<void> _performGlobalCloudRestore({
+  Future<bool> _performGlobalCloudRestore({
     required bool manageAutoSyncSuspension,
   }) async {
     setState(() => _isRestoringCloudData = true);
@@ -373,21 +390,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final shouldContinue = await _createSafetyBackupOrConfirm(
         'Avant restauration globale',
       );
-      if (!shouldContinue) return;
+      if (!shouldContinue) return false;
 
       await _downloadAllCloudDataToLocal();
 
-      if (!mounted) return;
-      _showSnackBar(
-        'Restauration réussie. Tes données cloud sont maintenant disponibles '
-        'dans l’application.',
-      );
+      if (mounted) {
+        _showSnackBar(
+          'Restauration réussie. Tes données cloud sont maintenant '
+          'disponibles dans l’application.',
+        );
+      }
+      return true;
     } catch (error) {
-      if (!mounted) return;
-      _showSnackBar(
-        'La restauration n’a pas pu être terminée. Tes données locales '
-        'restent accessibles. Détail : $error',
-      );
+      if (mounted) {
+        _showSnackBar(
+          'La restauration n’a pas pu être terminée. Tes données locales '
+          'restent accessibles. Détail : $error',
+        );
+      }
+      return false;
     } finally {
       if (manageAutoSyncSuspension) {
         await widget.onCloudRestoreStateChanged(false);
@@ -646,6 +667,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               _CloudStatusCard(
                 authService: widget.authService,
                 isRestoring: _isRestoringCloudData,
+                isChoosing: _isCloudOnboardingInProgress,
+                onChooseCloudSync: _resumeCloudOnboarding,
               ),
               const SizedBox(height: 12),
               _CloudSyncCard(
@@ -658,7 +681,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
               if (widget.authService.isSignedIn) ...[
                 const SizedBox(height: 12),
                 _CloudRestoreCard(
-                  isBusy: _isSyncingFridge || _isCloudOperationInProgress,
+                  isBusy:
+                      _isSyncingFridge ||
+                      _isCloudOperationInProgress ||
+                      widget.authService.isCloudOnboardingPending,
                   isRestoring: _isRestoringCloudData,
                   onRestore: _restoreAllCloudData,
                 ),
@@ -669,7 +695,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   isBusy:
                       _isSyncingFridge ||
                       _isCloudOperationInProgress ||
-                      _isLoadingBackups,
+                      _isLoadingBackups ||
+                      widget.authService.isCloudOnboardingPending,
                   isCreating: _isCreatingBackup,
                   isLoading: _isLoadingBackups,
                   restoringBackupId: _restoringBackupId,
@@ -1076,10 +1103,14 @@ class _CloudStatusCard extends StatelessWidget {
   const _CloudStatusCard({
     required this.authService,
     required this.isRestoring,
+    required this.isChoosing,
+    required this.onChooseCloudSync,
   });
 
   final AuthService authService;
   final bool isRestoring;
+  final bool isChoosing;
+  final VoidCallback onChooseCloudSync;
 
   @override
   Widget build(BuildContext context) {
@@ -1145,7 +1176,10 @@ class _CloudStatusCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    isCloudActive
+                    authService.isCloudOnboardingPending
+                        ? 'Aucune donnée locale ne sera envoyée au cloud tant '
+                              'que tu n’auras pas choisi quoi synchroniser.'
+                        : isCloudActive
                         ? 'Tes données sont sauvegardées automatiquement '
                               'lorsque tu es connecté.'
                         : 'Tes données restent enregistrées sur cet appareil. '
@@ -1154,6 +1188,28 @@ class _CloudStatusCard extends StatelessWidget {
                       color: colorScheme.onSurfaceVariant,
                     ),
                   ),
+                  if (authService.isCloudOnboardingPending) ...[
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.tonalIcon(
+                        onPressed: isChoosing ? null : onChooseCloudSync,
+                        icon: isChoosing
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.sync_alt_rounded),
+                        label: Text(
+                          isChoosing
+                              ? 'Choix en cours...'
+                              : 'Choisir quoi synchroniser',
+                        ),
+                      ),
+                    ),
+                  ],
                   if (isRestoring) ...[
                     const SizedBox(height: 6),
                     Row(
@@ -1203,7 +1259,11 @@ class _CloudSyncCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final canSync = authService.isAvailable && authService.isSignedIn && !isSyncing;
+    final canSync =
+        authService.isAvailable &&
+        authService.isSignedIn &&
+        !authService.isCloudOnboardingPending &&
+        !isSyncing;
 
     return _CardContainer(
       child: Padding(

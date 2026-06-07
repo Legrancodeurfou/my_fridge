@@ -323,7 +323,17 @@ abstract final class RecipeCatalog {
   }) {
     if (foods.isEmpty) return [];
 
-    final names = foods.map((food) => food.name.toLowerCase()).toList();
+    final usableFoods = foods
+        .where(
+          (food) =>
+              ExpiryHelper.urgencyFor(food.expiryDate) !=
+              ExpiryUrgency.expired,
+        )
+        .toList();
+    if (usableFoods.isEmpty) return [];
+
+    final names =
+        usableFoods.map((food) => food.name.toLowerCase()).toList();
     final recipes = _candidateRecipesForNames(names);
 
     final filtered = _filterForProfile(recipes, profile);
@@ -829,17 +839,25 @@ abstract final class RecipeCatalog {
     List<FoodItem> foods,
   ) {
     return recipe.requiredIngredients.map((ingredient) {
-      for (final food in foods) {
+      final matchingFoods = foods.where((food) {
         final name = food.name.toLowerCase();
-        if (ingredient.keywords.any((keyword) => name.contains(keyword))) {
-          final hasEnough =
+        return ingredient.keywords.any((keyword) => name.contains(keyword));
+      }).toList();
+
+      FoodItem? fallbackFood;
+
+      for (final food in matchingFoods) {
+        final isExpired =
+            ExpiryHelper.urgencyFor(food.expiryDate) == ExpiryUrgency.expired;
+        final hasEnough =
             normalizeUnitForDisplay(food.unit) ==
-              normalizeUnitForDisplay(ingredient.requiredUnit) &&
+                normalizeUnitForDisplay(ingredient.requiredUnit) &&
             food.amount >= ingredient.requiredAmount;
 
+        if (!isExpired && hasEnough) {
           return RecipeIngredientMatch(
             ingredient: ingredient,
-            isAvailable: hasEnough,
+            isAvailable: true,
             matchedFoodName: food.name,
             matchedFoodId: food.id,
             matchedFoodAmount: food.amount,
@@ -847,11 +865,20 @@ abstract final class RecipeCatalog {
             matchedFoodAmountLabel: food.amountLabel,
           );
         }
+
+        if (!isExpired) {
+          fallbackFood ??= food;
+        }
       }
 
       return RecipeIngredientMatch(
         ingredient: ingredient,
         isAvailable: false,
+        matchedFoodName: fallbackFood?.name,
+        matchedFoodId: fallbackFood?.id,
+        matchedFoodAmount: fallbackFood?.amount,
+        matchedFoodUnit: fallbackFood?.unit,
+        matchedFoodAmountLabel: fallbackFood?.amountLabel,
       );
     }).toList();
   }
@@ -960,9 +987,7 @@ abstract final class RecipeCatalog {
       final food = foods.firstWhere((item) => item.id == match.matchedFoodId);
       final days = ExpiryHelper.daysUntilExpiry(food.expiryDate);
 
-      if (days <= 0) {
-        score += 100;
-      } else if (days == 1) {
+      if (days == 1) {
         score += 60;
       } else if (days < 3) {
         score += 30;
