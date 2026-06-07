@@ -180,10 +180,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
         );
       }
     } catch (error) {
+      _logCloudError('Choix initial des données cloud', error);
       if (mounted) {
         _showSnackBar(
-          'Le cloud est temporairement indisponible. Tes données locales '
-          'restent accessibles. Détail : $error',
+          'La connexion cloud est indisponible. Tes données locales sont '
+          'conservées et la synchronisation reste suspendue.',
         );
       }
     } finally {
@@ -219,8 +220,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (!mounted || loadGeneration != _backupLoadGeneration) return;
       setState(() => _cloudBackups = backups);
     } catch (error) {
+      _logCloudError('Chargement des sauvegardes cloud', error);
       if (!mounted || loadGeneration != _backupLoadGeneration) return;
-      setState(() => _backupError = 'Sauvegardes indisponibles : $error');
+      setState(
+        () => _backupError =
+            'Les sauvegardes cloud sont indisponibles pour le moment.',
+      );
     } finally {
       if (mounted && loadGeneration == _backupLoadGeneration) {
         setState(() => _isLoadingBackups = false);
@@ -231,13 +236,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _signInWithGoogle() async {
     try {
       await widget.authService.signInWithGoogle();
-    } catch (_) {
+    } catch (error) {
+      _logCloudError('Connexion Google', error);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          content: Text(widget.authService.errorMessage ?? 'Connexion Google impossible'),
+          content: const Text(
+            'Connexion Google impossible pour le moment. Réessaie dans '
+            'quelques instants.',
+          ),
         ),
       );
     }
@@ -272,10 +281,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (!mounted) return;
       _showSnackBar('Frigo sauvegardé dans le cloud avec succès.');
     } catch (error) {
+      _logCloudError('Sauvegarde manuelle du frigo', error);
       if (!mounted) return;
       _showSnackBar(
-        'Le frigo n’a pas pu être sauvegardé. Tes données locales sont '
-        'conservées. Détail : $error',
+        'Le frigo n’a pas pu être sauvegardé dans le cloud. Tes données '
+        'locales sont conservées.',
       );
     } finally {
       if (mounted) setState(() => _isSyncingFridge = false);
@@ -326,10 +336,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
         'depuis le cloud.',
       );
     } catch (error) {
+      _logCloudError('Récupération du frigo cloud', error);
       if (!mounted) return;
       _showSnackBar(
         'Impossible de récupérer le frigo. Les données locales actuelles '
-        'sont conservées. Détail : $error',
+        'sont conservées.',
       );
     } finally {
       if (mounted) setState(() => _isSyncingFridge = false);
@@ -402,10 +413,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
       return true;
     } catch (error) {
+      _logCloudError('Restauration globale cloud', error);
       if (mounted) {
         _showSnackBar(
           'La restauration n’a pas pu être terminée. Tes données locales '
-          'restent accessibles. Détail : $error',
+          'restent accessibles.',
         );
       }
       return false;
@@ -428,7 +440,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
       await _loadCloudBackups();
       return true;
-    } catch (_) {
+    } catch (error) {
+      _logCloudError('Création de la sauvegarde de sécurité', error);
       if (!mounted) return false;
 
       final shouldContinue = await showDialog<bool>(
@@ -493,10 +506,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
         'conservées.',
       );
     } catch (error) {
+      _logCloudError('Création d’une sauvegarde cloud', error);
       if (!mounted) return;
       _showSnackBar(
         'La sauvegarde cloud n’a pas pu être créée. Réessaie dans quelques '
-        'instants. Détail : $error',
+        'instants. Tes données actuelles sont conservées.',
       );
     } finally {
       if (mounted) setState(() => _isCreatingBackup = false);
@@ -560,10 +574,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
         'active sur cet appareil.',
       );
     } catch (error) {
+      _logCloudError('Restauration d’une sauvegarde cloud', error);
       if (!mounted) return;
       _showSnackBar(
         'La sauvegarde n’a pas pu être restaurée. Tes données actuelles '
-        'restent accessibles. Détail : $error',
+        'restent accessibles.',
       );
     } finally {
       await widget.onCloudRestoreStateChanged(false);
@@ -585,6 +600,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         content: Text(message),
       ),
     );
+  }
+
+  void _logCloudError(String operation, Object error) {
+    debugPrint('$operation impossible : $error');
   }
 
   Future<void> _confirmResetDemoData() async {
@@ -1070,7 +1089,8 @@ class _AuthCard extends StatelessWidget {
             if (authService.errorMessage != null) ...[
               const SizedBox(height: 10),
               Text(
-                authService.errorMessage!,
+                'Le compte cloud n’est pas disponible pour le moment. '
+                'Tu peux continuer à utiliser l’app en mode local.',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: colorScheme.error,
                   fontWeight: FontWeight.w600,

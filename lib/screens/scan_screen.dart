@@ -155,9 +155,10 @@ class _ScanScreenState extends State<ScanScreen> {
     } catch (error) {
       if (!mounted) return;
 
+      debugPrint('Lecture de l’image du ticket impossible : $error');
       _showScanSnackBar(
         'Impossible de lire cette image. Essaie une photo plus nette ou '
-        'choisis un autre fichier. Détail : $error',
+        'choisis un autre fichier.',
         isError: true,
       );
     }
@@ -174,6 +175,14 @@ class _ScanScreenState extends State<ScanScreen> {
       if (!mounted) return;
 
       setState(() => _isScanning = false);
+
+      if (report.errorMessage != null &&
+          report.errorMessage!.trim().isNotEmpty) {
+        debugPrint(
+          'Analyse du ticket passée en mode secours : '
+          '${report.errorMessage}',
+        );
+      }
 
       if (report.products.isEmpty) {
         _showScanSnackBar(
@@ -197,6 +206,7 @@ class _ScanScreenState extends State<ScanScreen> {
       if (!mounted) return;
 
       setState(() => _isScanning = false);
+      debugPrint('Analyse du ticket impossible : $error');
 
       _showScanSnackBar(
         _scanErrorMessage(error),
@@ -213,27 +223,27 @@ class _ScanScreenState extends State<ScanScreen> {
         normalized.contains('socket') ||
         normalized.contains('connexion') ||
         normalized.contains('failed to fetch')) {
-      return 'Erreur réseau. Vérifie ta connexion puis relance l’analyse. '
-          'Détail : $detail';
+      return 'La connexion réseau est indisponible. Vérifie ta connexion '
+          'puis relance l’analyse.';
     }
 
     if (normalized.contains('gemini') ||
         normalized.contains('indisponible') ||
         normalized.contains('500') ||
         normalized.contains('503')) {
-      return 'Le service IA est temporairement indisponible. Réessaie dans '
-          'quelques instants. Détail : $detail';
+      return 'Le service d’analyse est temporairement indisponible. '
+          'Réessaie dans quelques instants.';
     }
 
     if (normalized.contains('format') ||
         normalized.contains('image') ||
         normalized.contains('invalide')) {
-      return 'L’image ou la réponse reçue n’a pas pu être lue. Essaie une '
-          'photo plus nette. Détail : $detail';
+      return 'Le ticket n’a pas pu être lu. Essaie une photo plus nette, '
+          'entière et bien éclairée.';
     }
 
-    return 'L’analyse a échoué. Aucun produit n’a été ajouté. '
-        'Réessaie avec une autre photo. Détail : $detail';
+    return 'Impossible d’analyser ce ticket pour le moment. Aucun produit '
+        'n’a été ajouté. Réessaie dans quelques instants.';
   }
 
   void _showScanSnackBar(String message, {bool isError = false}) {
@@ -584,7 +594,8 @@ class _AiDiagnosticSection extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
                     child: Text(
-                      'Gemini a échoué, l’app a utilisé le mode démo de secours.',
+                      'Le service d’analyse était indisponible. '
+                      'L’app a utilisé le mode démo de secours.',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: colorScheme.error,
                         fontWeight: FontWeight.w600,
@@ -958,7 +969,8 @@ class _ScanDiagnosticBox extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: 6),
               child: Text(
-                scan.errorMessage!,
+                'Le service d’analyse n’était pas disponible lors de ce scan. '
+                'Les résultats ont dû être vérifiés manuellement.',
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.bodySmall?.copyWith(
