@@ -68,6 +68,15 @@ class _ScanScreenState extends State<ScanScreen> {
                           fontWeight: FontWeight.w700,
                         ),
                   ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Utilise une photo nette où les lignes du ticket sont '
+                    'faciles à lire.',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(sheetContext).textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                  ),
                   const SizedBox(height: 16),
                   Material(
                     color: Colors.transparent,
@@ -106,50 +115,53 @@ class _ScanScreenState extends State<ScanScreen> {
     await _pickImage(source);
   }
 
-Future<void> _pickImage(ImageSource source) async {
-  try {
-    if (kIsWeb) {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.image,
-        withData: true,
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      if (kIsWeb) {
+        final result = await FilePicker.platform.pickFiles(
+          type: FileType.image,
+          withData: true,
+        );
+
+        if (!mounted) return;
+        if (result == null || result.files.isEmpty) return;
+
+        final bytes = result.files.first.bytes;
+
+        if (bytes == null || bytes.isEmpty) {
+          throw Exception('Image vide ou illisible');
+        }
+
+        setState(() => _pickedImageBytes = bytes);
+        return;
+      }
+
+      final image = await _imagePicker.pickImage(
+        source: source,
+        imageQuality: 85,
       );
 
       if (!mounted) return;
-      if (result == null || result.files.isEmpty) return;
+      if (image == null) return;
 
-      final bytes = result.files.first.bytes;
+      final bytes = await image.readAsBytes();
 
-      if (bytes == null) {
-        throw Exception('Image introuvable');
+      if (!mounted) return;
+      if (bytes.isEmpty) {
+        throw Exception('Image vide ou illisible');
       }
 
       setState(() => _pickedImageBytes = bytes);
-      return;
+    } catch (error) {
+      if (!mounted) return;
+
+      _showScanSnackBar(
+        'Impossible de lire cette image. Essaie une photo plus nette ou '
+        'choisis un autre fichier. Détail : $error',
+        isError: true,
+      );
     }
-
-    final image = await _imagePicker.pickImage(
-      source: source,
-      imageQuality: 85,
-    );
-
-    if (!mounted) return;
-    if (image == null) return;
-
-    final bytes = await image.readAsBytes();
-
-    if (!mounted) return;
-
-    setState(() => _pickedImageBytes = bytes);
-  } catch (e) {
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Erreur : $e'),
-      ),
-    );
   }
-}
 
   Future<void> _analyzeTicket() async {
     if (_isScanning || _pickedImageBytes == null) return;
@@ -164,15 +176,21 @@ Future<void> _pickImage(ImageSource source) async {
       setState(() => _isScanning = false);
 
       if (report.products.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            content: const Text('Aucun produit alimentaire détecté sur ce ticket.'),
-          ),
+        _showScanSnackBar(
+          'Aucun produit détecté. Vérifie que le ticket est entier, net et '
+          'bien éclairé, puis relance l’analyse.',
+          isError: true,
         );
         return;
       }
+
+      _showScanSnackBar(
+        report.usedFallback
+            ? 'Service IA indisponible : résultats de démonstration affichés. '
+                  'Vérifie chaque produit avant de valider.'
+            : 'Analyse réussie : ${report.products.length} produit(s) '
+                  'détecté(s). Vérifie-les avant de les ajouter.',
+      );
 
       await _showValidationSheet(report);
     } catch (error) {
@@ -180,14 +198,65 @@ Future<void> _pickImage(ImageSource source) async {
 
       setState(() => _isScanning = false);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          content: Text('Erreur scan IA : $error'),
-        ),
+      _showScanSnackBar(
+        _scanErrorMessage(error),
+        isError: true,
       );
     }
+  }
+
+  String _scanErrorMessage(Object error) {
+    final detail = error.toString();
+    final normalized = detail.toLowerCase();
+
+    if (normalized.contains('network') ||
+        normalized.contains('socket') ||
+        normalized.contains('connexion') ||
+        normalized.contains('failed to fetch')) {
+      return 'Erreur réseau. Vérifie ta connexion puis relance l’analyse. '
+          'Détail : $detail';
+    }
+
+    if (normalized.contains('gemini') ||
+        normalized.contains('indisponible') ||
+        normalized.contains('500') ||
+        normalized.contains('503')) {
+      return 'Le service IA est temporairement indisponible. Réessaie dans '
+          'quelques instants. Détail : $detail';
+    }
+
+    if (normalized.contains('format') ||
+        normalized.contains('image') ||
+        normalized.contains('invalide')) {
+      return 'L’image ou la réponse reçue n’a pas pu être lue. Essaie une '
+          'photo plus nette. Détail : $detail';
+    }
+
+    return 'L’analyse a échoué. Aucun produit n’a été ajouté. '
+        'Réessaie avec une autre photo. Détail : $detail';
+  }
+
+  void _showScanSnackBar(String message, {bool isError = false}) {
+    if (!mounted) return;
+
+    final colorScheme = Theme.of(context).colorScheme;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          backgroundColor: isError ? colorScheme.errorContainer : null,
+          content: Text(
+            message,
+            style: isError
+                ? TextStyle(color: colorScheme.onErrorContainer)
+                : null,
+          ),
+        ),
+      );
   }
 
   Future<void> _showManualAddSheet() {
@@ -205,15 +274,7 @@ Future<void> _pickImage(ImageSource source) async {
               widget.store.addFood(food);
               Navigator.pop(sheetContext);
 
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  content: Text('${food.name} ajouté au frigo'),
-                ),
-              );
+              _showScanSnackBar('${food.name} a été ajouté au frigo.');
 
               widget.onNavigateToFridge();
             },
@@ -233,7 +294,13 @@ Future<void> _pickImage(ImageSource source) async {
       builder: (sheetContext) {
         return _ScanValidationSheet(
           detectedDrafts: report.products,
-          onCancel: () => Navigator.pop(sheetContext),
+          usedFallback: report.usedFallback,
+          onCancel: () {
+            Navigator.pop(sheetContext);
+            _showScanSnackBar(
+              'Validation annulée. Aucun produit détecté n’a été ajouté.',
+            );
+          },
           onValidate: (selectedFoods) {
             widget.store.addFoods(selectedFoods);
             widget.historyStore.addScan(
@@ -246,18 +313,10 @@ Future<void> _pickImage(ImageSource source) async {
             Navigator.pop(sheetContext);
 
             final count = selectedFoods.length;
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                content: Text(
-                  count == 1
-                      ? '1 aliment ajouté au frigo'
-                      : '$count aliments ajoutés au frigo',
-                ),
-              ),
+            _showScanSnackBar(
+              count == 1
+                  ? '1 aliment validé et ajouté au frigo.'
+                  : '$count aliments validés et ajoutés au frigo.',
             );
 
             widget.onNavigateToFridge();
@@ -334,7 +393,8 @@ Future<void> _pickImage(ImageSource source) async {
           ),
           const SizedBox(height: 12),
           Text(
-            'Prends une photo de ton ticket pour ajouter automatiquement tes produits dans ton frigo.',
+            'Prends une photo ou choisis une image du ticket. Tu pourras '
+            'corriger chaque produit avant de l’ajouter au frigo.',
             textAlign: TextAlign.center,
             style: theme.textTheme.bodyLarge?.copyWith(
               color: colorScheme.onSurfaceVariant,
@@ -344,8 +404,8 @@ Future<void> _pickImage(ImageSource source) async {
           const SizedBox(height: 32),
           FilledButton.icon(
             onPressed: _isScanning ? null : _showImageSourceSheet,
-            icon: const Icon(Icons.photo_camera_rounded),
-            label: const Text('Prendre une photo'),
+            icon: const Icon(Icons.add_a_photo_rounded),
+            label: const Text('Choisir une image du ticket'),
             style: FilledButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(
@@ -357,7 +417,7 @@ Future<void> _pickImage(ImageSource source) async {
           OutlinedButton.icon(
             onPressed: _isScanning ? null : _showManualAddSheet,
             icon: const Icon(Icons.edit_rounded),
-            label: const Text('Ajouter manuellement'),
+            label: const Text('Ajouter un produit sans ticket'),
             style: OutlinedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(
@@ -394,7 +454,8 @@ Future<void> _pickImage(ImageSource source) async {
           ),
           const SizedBox(height: 12),
           Text(
-            'Vérifie que le ticket est lisible avant l’analyse.',
+            'Vérifie que le ticket est net, entier et bien éclairé avant '
+            'l’analyse.',
             textAlign: TextAlign.center,
             style: theme.textTheme.bodyLarge?.copyWith(
               color: colorScheme.onSurfaceVariant,
@@ -404,6 +465,15 @@ Future<void> _pickImage(ImageSource source) async {
           _TicketPreviewCard(
             imageBytes: imageBytes,
             maxHeight: previewMaxHeight,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Aucun produit ne sera ajouté automatiquement. Tu confirmeras '
+            'la liste après l’analyse.',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
           ),
           const SizedBox(height: 24),
           FilledButton.icon(
@@ -420,8 +490,8 @@ Future<void> _pickImage(ImageSource source) async {
           const SizedBox(height: 12),
           OutlinedButton.icon(
             onPressed: _isScanning ? null : _showImageSourceSheet,
-            icon: const Icon(Icons.photo_camera_outlined),
-            label: const Text('Reprendre une photo'),
+            icon: const Icon(Icons.image_search_rounded),
+            label: const Text('Choisir une autre image'),
             style: OutlinedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(
@@ -951,6 +1021,38 @@ class _TicketPreviewCard extends StatelessWidget {
           fit: BoxFit.contain,
           gaplessPlayback: true,
           filterQuality: FilterQuality.medium,
+          errorBuilder: (context, error, stackTrace) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.broken_image_outlined,
+                      size: 42,
+                      color: colorScheme.error,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Image non lisible',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Choisis une autre photo avant de lancer l’analyse.',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
         ),
       ),
     );
@@ -960,11 +1062,13 @@ class _TicketPreviewCard extends StatelessWidget {
 class _ScanValidationSheet extends StatefulWidget {
   const _ScanValidationSheet({
     required this.detectedDrafts,
+    required this.usedFallback,
     required this.onCancel,
     required this.onValidate,
   });
 
   final List<DetectedProductDraft> detectedDrafts;
+  final bool usedFallback;
   final VoidCallback onCancel;
   final void Function(List<FoodItem> selectedFoods) onValidate;
 
@@ -1006,6 +1110,46 @@ class _ScanValidationSheetState extends State<_ScanValidationSheet> {
         return draft.copyWith(amount: nextAmount);
       }).toList();
     });
+  }
+
+  void _changeUnit(String id, String unit) {
+    setState(() {
+      _items = _items.map((draft) {
+        if (draft.id != id) return draft;
+        return draft.copyWith(unit: unit);
+      }).toList();
+    });
+  }
+
+  Future<void> _addProductManually() {
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(sheetContext).bottom,
+          ),
+          child: _ManualFoodFormSheet(
+            onSave: (food) {
+              final draft = DetectedProductDraft(
+                id: 'manual_${DateTime.now().microsecondsSinceEpoch}',
+                name: food.name,
+                category: food.category,
+                estimatedExpirationDate: food.expiryDate,
+                quantity: food.quantity,
+                amount: food.amount,
+                unit: food.unit,
+              );
+
+              setState(() => _items = [..._items, draft]);
+              Navigator.pop(sheetContext);
+            },
+          ),
+        );
+      },
+    );
   }
 
   List<FoodItem> _foodsForFridge() {
@@ -1075,7 +1219,7 @@ class _ScanValidationSheetState extends State<_ScanValidationSheet> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Vérifie la liste avant de l’ajouter au frigo.',
+                              'Corrige la liste avant de l’ajouter au frigo.',
                               style: theme.textTheme.bodyMedium?.copyWith(
                                 color: colorScheme.onSurfaceVariant,
                               ),
@@ -1085,6 +1229,37 @@ class _ScanValidationSheetState extends State<_ScanValidationSheet> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Tu peux modifier les quantités et unités, supprimer une '
+                    'ligne ou ajouter un produit oublié. Rien ne sera ajouté '
+                    'avant ta validation.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                      height: 1.35,
+                    ),
+                  ),
+                  if (widget.usedFallback) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: colorScheme.errorContainer.withValues(
+                          alpha: 0.55,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        'Mode démo utilisé : le service IA était indisponible. '
+                        'Vérifie attentivement chaque produit.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onErrorContainer,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 8),
                   Text(
                     _items.isEmpty
@@ -1112,6 +1287,7 @@ class _ScanValidationSheetState extends State<_ScanValidationSheet> {
                     draft: draft,
                     onIncrement: () => _incrementQuantity(draft.id),
                     onDecrement: () => _decrementQuantity(draft.id),
+                    onUnitChanged: (unit) => _changeUnit(draft.id, unit),
                     onRemove: () => _removeItem(draft.id),
                   );
                 },
@@ -1129,6 +1305,17 @@ class _ScanValidationSheetState extends State<_ScanValidationSheet> {
                 ),
               ),
             Padding(
+              padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+              child: SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _addProductManually,
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('Ajouter un produit oublié'),
+                ),
+              ),
+            ),
+            Padding(
               padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
               child: Row(
                 children: [
@@ -1141,7 +1328,7 @@ class _ScanValidationSheetState extends State<_ScanValidationSheet> {
                           borderRadius: BorderRadius.circular(14),
                         ),
                       ),
-                      child: const Text('Annuler'),
+                      child: const Text('Annuler sans ajouter'),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -1156,7 +1343,7 @@ class _ScanValidationSheetState extends State<_ScanValidationSheet> {
                           borderRadius: BorderRadius.circular(14),
                         ),
                       ),
-                      child: const Text('Valider'),
+                      child: const Text('Valider et ajouter'),
                     ),
                   ),
                 ],
@@ -1174,12 +1361,14 @@ class _DetectedProductTile extends StatelessWidget {
     required this.draft,
     required this.onIncrement,
     required this.onDecrement,
+    required this.onUnitChanged,
     required this.onRemove,
   });
 
   final DetectedProductDraft draft;
   final VoidCallback onIncrement;
   final VoidCallback onDecrement;
+  final ValueChanged<String> onUnitChanged;
   final VoidCallback onRemove;
 
   @override
@@ -1200,7 +1389,7 @@ class _DetectedProductTile extends StatelessWidget {
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final stackControls = constraints.maxWidth < 340;
+          final stackControls = constraints.maxWidth < 430;
 
           final nameColumn = Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1223,8 +1412,11 @@ class _DetectedProductTile extends StatelessWidget {
             ],
           );
 
-          final controlsRow = Row(
-            mainAxisSize: MainAxisSize.min,
+          final controlsRow = Wrap(
+            alignment: WrapAlignment.end,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 4,
+            runSpacing: 8,
             children: [
               _QuantityStepper(
                 amountLabel: draft.amountLabel,
@@ -1232,11 +1424,55 @@ class _DetectedProductTile extends StatelessWidget {
                 onDecrement: onDecrement,
                 onIncrement: onIncrement,
               ),
-              IconButton(
+              const SizedBox(width: 6),
+              PopupMenuButton<String>(
+                initialValue: draft.unit,
+                tooltip: 'Modifier l’unité',
+                onSelected: onUnitChanged,
+                itemBuilder: (context) {
+                  return MeasurementHelper.units.map((unit) {
+                    return PopupMenuItem<String>(
+                      value: unit,
+                      child: Text(unit),
+                    );
+                  }).toList();
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: colorScheme.surface,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: colorScheme.outlineVariant.withValues(alpha: 0.55),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        draft.unit,
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      const Icon(Icons.arrow_drop_down_rounded, size: 18),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              TextButton.icon(
                 onPressed: onRemove,
-                icon: Icon(Icons.close_rounded, color: colorScheme.error),
-                tooltip: 'Retirer',
-                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.delete_outline_rounded),
+                label: const Text('Supprimer'),
+                style: TextButton.styleFrom(
+                  foregroundColor: colorScheme.error,
+                  visualDensity: VisualDensity.compact,
+                ),
               ),
             ],
           );
@@ -1677,6 +1913,16 @@ class _ScanLoadingOverlay extends StatelessWidget {
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
                 color: colorScheme.onSurface,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Gemini recherche les produits. Tu pourras tout vérifier '
+              'et corriger avant l’ajout au frigo.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: colorScheme.onSurfaceVariant,
+                height: 1.35,
               ),
             ),
           ],
