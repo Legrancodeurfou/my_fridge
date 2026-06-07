@@ -19,6 +19,7 @@
 - Supabase pour l'authentification, les données cloud, RLS et les RPC PostgreSQL.
 - Netlify/Gemini pour l'analyse distante des tickets.
 - `main.dart` charge les stores, construit la navigation et orchestre les synchronisations automatiques.
+- Déploiement web de production assuré par Netlify.
 
 ## Stores locaux
 
@@ -65,7 +66,16 @@ Les tables utilisent RLS afin qu'un utilisateur ne puisse accéder qu'à ses pro
 - `restore_cloud_backup`
 - `prune_cloud_backups`
 
-Les RPC de remplacement effectuent suppression et réinsertion dans une transaction PostgreSQL, utilisent `auth.uid()` et acceptent les listes vides. Les migrations du dossier `supabase/migrations` doivent être appliquées dans Supabase.
+Les RPC de remplacement installées effectuent suppression et réinsertion dans une transaction PostgreSQL, utilisent `auth.uid()` et acceptent les listes vides. Leur définition est versionnée dans `supabase/migrations`.
+
+## Security status
+
+- Gitleaks a analysé 62 commits sans détecter de secret.
+- Les secrets de production sont gérés avec les variables d'environnement Netlify.
+- Aucune clé Gemini n'est intégrée dans l'application Flutter ; `GEMINI_API_KEY` est utilisée uniquement par la fonction Netlify.
+- Aucune clé Supabase `service_role` n'est présente dans le projet.
+- La clé Supabase anon/publishable est utilisée uniquement comme clé publique côté client.
+- RLS est activée sur les tables Supabase afin d'isoler les données par utilisateur.
 
 ## Authentification Google
 
@@ -105,11 +115,17 @@ Une sauvegarde de sécurité est créée avant chaque restauration. La logique S
 - L'analyse Gemini dépend de la disponibilité de Netlify et du réseau.
 - Le client HTTP web Gemini utilise encore `dart:html`, qui génère deux diagnostics d'analyse non bloquants.
 
-## Prochaines étapes recommandées
+## Current known warnings
 
-1. Ajouter un état global « synchronisé / en attente / erreur » et une action de nouvelle tentative.
-2. Replanifier automatiquement une modification survenue pendant un upload.
-3. Ajouter une stratégie de versionnement ou de détection des conflits multi-appareils.
-4. Ajouter des tests d'intégration pour les RPC, les restaurations et les coupures réseau.
-5. Migrer le client HTTP web Gemini de `dart:html` vers `package:web`.
-6. Automatiser l'application et la validation des migrations Supabase par environnement.
+- `flutter analyze` signale deux diagnostics dans `ticket_analysis_http_client_web.dart`.
+- Ils concernent l'utilisation dépréciée de `dart:html` et la présence d'une bibliothèque réservée au web.
+- Ces diagnostics ne sont pas bloquants : `flutter build web` réussit actuellement, y compris le dry-run Wasm.
+- Une migration future vers `package:web` permettra de les supprimer.
+
+## Next product priorities
+
+1. Améliorer l'UX cloud dans Profil : statut, progression, erreurs et actions de reprise.
+2. Améliorer le scan de ticket et la correction manuelle des produits détectés.
+3. Enrichir les recettes et les suggestions anti-gaspillage.
+4. Préparer et valider le build mobile Android.
+5. Préparer une bêta V1 avec tests utilisateurs et suivi des retours.
