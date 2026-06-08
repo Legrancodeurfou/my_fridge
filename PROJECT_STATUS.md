@@ -3,13 +3,15 @@
 ## Fonctionnalités actuelles
 
 - Gestion du frigo : ajout, modification, consommation, suppression et suivi des dates d'expiration.
-- Liste de courses avec quantités, unités et statut coché.
+- Liste de courses avec quantités, unités, fusion des besoins compatibles et statut coché.
 - Scan de tickets ou produits, avec analyse Gemini via une fonction Netlify et mode de démonstration de secours.
 - Historique des scans, limité localement aux 30 derniers éléments.
 - Suggestions de recettes selon le contenu du frigo.
 - Recettes favorites et notes personnelles.
-- Profil utilisateur et préférences de cuisine.
+- Conversions simples entre `g`/`kg`, `ml`/`cl`/`l`, `unité`/`unités` et `tranche`/`tranches`.
+- Profil utilisateur, préférences de cuisine et aperçu des rappels de péremption.
 - Connexion Google, synchronisation Supabase, restauration globale et sauvegardes cloud.
+- Informations de transparence sur le scan IA et les données dans Scan et Profil.
 
 ## Architecture technique
 
@@ -20,6 +22,7 @@
 - Netlify/Gemini pour l'analyse distante des tickets.
 - `main.dart` charge les stores, construit la navigation et orchestre les synchronisations automatiques.
 - Déploiement web de production assuré par Netlify.
+- Builds Web et Android debug validés.
 
 ## Stores locaux
 
@@ -28,7 +31,7 @@
 - `ScanHistoryStore` : historique des scans.
 - `FavoriteRecipesStore` : recettes favorites.
 - `RecipeNotesStore` : notes associées aux recettes.
-- `ProfileStore` : nom et préférences utilisateur.
+- `ProfileStore` : nom, préférences utilisateur, activation locale des rappels et dernière ouverture de l'application.
 
 Les stores restent utilisables sans Supabase et sauvegardent leurs données dans `SharedPreferences`.
 
@@ -76,6 +79,7 @@ Les RPC de remplacement installées effectuent suppression et réinsertion dans 
 - Aucune clé Supabase `service_role` n'est présente dans le projet.
 - La clé Supabase anon/publishable est utilisée uniquement comme clé publique côté client.
 - RLS est activée sur les tables Supabase afin d'isoler les données par utilisateur.
+- La fonction Netlify de scan refuse les méthodes non autorisées, valide le body et l'image, limite leur taille, applique un délai maximal et masque les détails techniques Gemini.
 
 ## Authentification Google
 
@@ -106,6 +110,24 @@ Le Profil permet :
 
 Une sauvegarde de sécurité est créée avant chaque restauration. La logique SQL protège temporairement le backup ciblé afin qu'il ne soit pas supprimé par la rétention.
 
+## État de validation V1
+
+- Web fonctionnel.
+- Android debug fonctionnel sur téléphone réel.
+- `flutter analyze` : 0 diagnostic.
+- `flutter test` : 9 tests réussis.
+- `flutter build web` : réussi.
+- `flutter build apk --debug` : réussi avec les variables fournies par `--dart-define`.
+
+Les tests ciblent notamment le démarrage de l'application, les conversions de mesures et les calculs de quantités pour les recettes et les courses.
+
+## Transparence et confidentialité
+
+- Scan explique avant sélection que l'image du ticket est envoyée à un service d'analyse IA.
+- Aucun produit détecté n'est ajouté au frigo sans validation manuelle.
+- Profil précise que les données restent locales hors connexion et sont synchronisées au cloud seulement avec un compte connecté.
+- Les rappels de péremption sont en Phase 1 : préférence locale et aperçu des aliments urgents, sans notification système réelle.
+
 ## Limites actuelles
 
 - Synchronisation de type « dernier appareil gagnant », sans fusion ni gestion de conflits.
@@ -113,19 +135,15 @@ Une sauvegarde de sécurité est créée avant chaque restauration. La logique S
 - Pas de relance automatique après une erreur réseau sans nouvelle modification locale.
 - Une réponse réseau perdue après un commit peut signaler un échec alors que la transaction a réussi.
 - L'analyse Gemini dépend de la disponibilité de Netlify et du réseau.
-- Le client HTTP web Gemini utilise encore `dart:html`, qui génère deux diagnostics d'analyse non bloquants.
+- Les conversions couvrent seulement les familles simples listées plus haut ; elles ne gèrent pas les densités, contenants ou lots séparés par date.
+- Les rappels n'envoient encore aucune notification réelle.
+- Le nom, l'icône et la charte graphique restent provisoires.
+- Les plugins Android devront à terme suivre la migration Flutter vers le mode Kotlin intégré.
 
-## Current known warnings
+## Prochains chantiers possibles
 
-- `flutter analyze` signale deux diagnostics dans `ticket_analysis_http_client_web.dart`.
-- Ils concernent l'utilisation dépréciée de `dart:html` et la présence d'une bibliothèque réservée au web.
-- Ces diagnostics ne sont pas bloquants : `flutter build web` réussit actuellement, y compris le dry-run Wasm.
-- Une migration future vers `package:web` permettra de les supprimer.
-
-## Next product priorities
-
-1. Améliorer l'UX cloud dans Profil : statut, progression, erreurs et actions de reprise.
-2. Améliorer le scan de ticket et la correction manuelle des produits détectés.
+1. Organiser le test interne V1 sur plusieurs appareils et scénarios hors connexion.
+2. Améliorer encore la correction manuelle et la fiabilité des résultats du scan.
 3. Enrichir les recettes et les suggestions anti-gaspillage.
-4. Préparer et valider le build mobile Android.
-5. Préparer une bêta V1 avec tests utilisateurs et suivi des retours.
+4. Évaluer une Phase 2 optionnelle de rappels locaux Android, avec une fréquence limitée.
+5. Finaliser le nom, l'icône, le splash et la charte graphique avant une bêta plus large.
