@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 import '../data/fridge_store.dart';
 import '../data/scan_history_store.dart';
@@ -26,6 +27,10 @@ class ScanScreen extends StatefulWidget {
 }
 
 class _ScanScreenState extends State<ScanScreen> {
+  static const _androidSettingsChannel = MethodChannel(
+    'com.myfridge.app/settings',
+  );
+
   final _imagePicker = ImagePicker();
   final _ticketAnalysis = const TicketAnalysisService();
 
@@ -132,16 +137,102 @@ class _ScanScreenState extends State<ScanScreen> {
       }
 
       setState(() => _pickedImageBytes = bytes);
+    } on PlatformException catch (error) {
+      if (!mounted) return;
+
+      debugPrint('Lecture de l’image du ticket impossible : $error');
+
+      if (source == ImageSource.camera &&
+          error.code == 'camera_access_denied') {
+        await _handleCameraPermissionDenied();
+        return;
+      }
+
+      _showImageReadError();
     } catch (error) {
       if (!mounted) return;
 
       debugPrint('Lecture de l’image du ticket impossible : $error');
-      _showScanSnackBar(
-        'Impossible de lire cette image. Essaie une photo plus nette ou '
-        'choisis un autre fichier.',
-        isError: true,
-      );
+      _showImageReadError();
     }
+  }
+
+  Future<void> _handleCameraPermissionDenied() async {
+    var isPermanentlyDenied = false;
+
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      try {
+        final status = await _androidSettingsChannel.invokeMethod<String>(
+          'cameraPermissionStatus',
+        );
+        isPermanentlyDenied = status == 'permanentlyDenied';
+      } catch (error) {
+        debugPrint('Statut de l’autorisation caméra indisponible : $error');
+      }
+    }
+
+    if (!mounted) return;
+
+    if (!isPermanentlyDenied) {
+      _showScanSnackBar(
+        'Accès à la caméra refusé. Tu peux réessayer ou choisir une image '
+        'dans la galerie.',
+        isError: true,
+        actionLabel: 'Galerie',
+        onAction: () => _pickImage(ImageSource.gallery),
+      );
+      return;
+    }
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Autoriser la caméra ?'),
+          content: const Text(
+            'L’accès à la caméra est désactivé pour My Fridge. Tu peux '
+            'l’autoriser dans les réglages Android ou continuer avec une '
+            'image de la galerie.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                _pickImage(ImageSource.gallery);
+              },
+              child: const Text('Utiliser la galerie'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                Navigator.pop(dialogContext);
+                try {
+                  await _androidSettingsChannel.invokeMethod<bool>(
+                    'openAppSettings',
+                  );
+                } catch (error) {
+                  debugPrint('Ouverture des réglages impossible : $error');
+                  if (mounted) {
+                    _showScanSnackBar(
+                      'Impossible d’ouvrir les réglages automatiquement.',
+                      isError: true,
+                    );
+                  }
+                }
+              },
+              child: const Text('Ouvrir les réglages'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showImageReadError() {
+    _showScanSnackBar(
+      'Impossible de lire cette image. Essaie une photo plus nette ou '
+      'choisis un autre fichier.',
+      isError: true,
+    );
   }
 
   Future<void> _analyzeTicket() async {
@@ -226,7 +317,12 @@ class _ScanScreenState extends State<ScanScreen> {
         'n’a été ajouté. Réessaie dans quelques instants.';
   }
 
-  void _showScanSnackBar(String message, {bool isError = false}) {
+  void _showScanSnackBar(
+    String message, {
+    bool isError = false,
+    String? actionLabel,
+    VoidCallback? onAction,
+  }) {
     if (!mounted) return;
 
     final colorScheme = Theme.of(context).colorScheme;
@@ -245,6 +341,12 @@ class _ScanScreenState extends State<ScanScreen> {
                 ? TextStyle(color: colorScheme.onErrorContainer)
                 : null,
           ),
+          action: actionLabel != null && onAction != null
+              ? SnackBarAction(
+                  label: actionLabel,
+                  onPressed: onAction,
+                )
+              : null,
         ),
       );
   }
@@ -1303,36 +1405,50 @@ class _ScanValidationSheetState extends State<_ScanValidationSheet> {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: widget.onCancel,
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final cancelButton = OutlinedButton(
+                    onPressed: widget.onCancel,
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
                       ),
-                      child: const Text('Annuler sans ajouter'),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: FilledButton(
-                      onPressed: canValidate
-                          ? () => widget.onValidate(_foodsForFridge())
-                          : null,
-                      style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
+                    child: const Text('Annuler sans ajouter'),
+                  );
+                  final validateButton = FilledButton(
+                    onPressed: canValidate
+                        ? () => widget.onValidate(_foodsForFridge())
+                        : null,
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
                       ),
-                      child: const Text('Valider et ajouter'),
                     ),
-                  ),
-                ],
+                    child: const Text('Valider et ajouter'),
+                  );
+
+                  if (constraints.maxWidth < 340) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        validateButton,
+                        const SizedBox(height: 10),
+                        cancelButton,
+                      ],
+                    );
+                  }
+
+                  return Row(
+                    children: [
+                      Expanded(child: cancelButton),
+                      const SizedBox(width: 12),
+                      Expanded(child: validateButton),
+                    ],
+                  );
+                },
               ),
             ),
           ],
