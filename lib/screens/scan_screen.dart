@@ -493,7 +493,51 @@ class _ScanScreenState extends State<ScanScreen> {
               height: 1.4,
             ),
           ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 20),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: colorScheme.primaryContainer.withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.info_outline_rounded,
+                  size: 20,
+                  color: colorScheme.primary,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text: 'À savoir\n',
+                          style: theme.textTheme.labelLarge?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: colorScheme.onPrimaryContainer,
+                          ),
+                        ),
+                        TextSpan(
+                          text:
+                              'L’image du ticket est envoyée à un service '
+                              'd’analyse IA pour détecter les produits. Rien '
+                              'n’est ajouté au frigo sans ta validation.',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onPrimaryContainer,
+                            height: 1.35,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
           FilledButton.icon(
             onPressed: _isScanning ? null : _showImageSourceSheet,
             icon: const Icon(Icons.add_a_photo_rounded),
