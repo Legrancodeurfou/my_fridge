@@ -284,6 +284,11 @@ abstract final class ExpiryHelper {
     return normalized.difference(_today).inDays;
   }
 
+  static bool isUrgentForReminder(DateTime expiryDate) {
+    final days = daysUntilExpiry(expiryDate);
+    return days >= 0 && days <= 1;
+  }
+
   static ExpiryUrgency urgencyFor(DateTime expiryDate) {
     final days = daysUntilExpiry(expiryDate);
     if (days <= 0) return ExpiryUrgency.expired;

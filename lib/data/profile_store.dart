@@ -91,7 +91,11 @@ class ProfileData {
 }
 
 class ProfileStore extends ChangeNotifier {
-  ProfileStore._(this._profile);
+  ProfileStore._(
+    this._profile,
+    this._expiryRemindersEnabled,
+    this._lastAppOpenedAt,
+  );
 
   static const _nameKey = 'profile_name';
   static const _levelKey = 'profile_cooking_level';
@@ -100,15 +104,21 @@ class ProfileStore extends ChangeNotifier {
   static const _ovenKey = 'profile_oven';
   static const _microwaveKey = 'profile_microwave';
   static const _thermomixKey = 'profile_thermomix';
+  static const _expiryRemindersEnabledKey = 'profile_expiry_reminders_enabled';
+  static const _lastAppOpenedAtKey = 'profile_last_app_opened_at';
 
   ProfileData _profile;
+  bool _expiryRemindersEnabled;
+  DateTime? _lastAppOpenedAt;
 
   ProfileData get profile => _profile;
+  bool get expiryRemindersEnabled => _expiryRemindersEnabled;
+  DateTime? get lastAppOpenedAt => _lastAppOpenedAt;
 
   static Future<ProfileStore> load() async {
     final prefs = await SharedPreferences.getInstance();
 
-    return ProfileStore._(
+    final store = ProfileStore._(
       ProfileData(
         name: prefs.getString(_nameKey) ?? ProfileData.defaults.name,
         cookingLevel: CookingLevelLabel.fromLabel(
@@ -122,6 +132,29 @@ class ProfileStore extends ChangeNotifier {
         hasMicrowave: prefs.getBool(_microwaveKey) ?? ProfileData.defaults.hasMicrowave,
         hasThermomix: prefs.getBool(_thermomixKey) ?? ProfileData.defaults.hasThermomix,
       ),
+      prefs.getBool(_expiryRemindersEnabledKey) ?? false,
+      DateTime.tryParse(
+        prefs.getString(_lastAppOpenedAtKey) ?? '',
+      ),
+    );
+
+    await store.recordAppOpened();
+    return store;
+  }
+
+  Future<void> updateExpiryRemindersEnabled(bool value) async {
+    _expiryRemindersEnabled = value;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_expiryRemindersEnabledKey, value);
+  }
+
+  Future<void> recordAppOpened() async {
+    _lastAppOpenedAt = DateTime.now();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _lastAppOpenedAtKey,
+      _lastAppOpenedAt!.toIso8601String(),
     );
   }
 

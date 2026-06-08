@@ -8,6 +8,7 @@ import '../data/profile_store.dart';
 import '../data/recipe_notes_store.dart';
 import '../data/scan_history_store.dart';
 import '../data/shopping_list_store.dart';
+import '../models/food.dart';
 import '../services/auth_service.dart';
 import '../services/cloud_backup_service.dart';
 import '../services/cloud_favorite_recipes_service.dart';
@@ -646,10 +647,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: Listenable.merge([widget.store, widget.authService]),
+      listenable: Listenable.merge([
+        widget.store,
+        widget.fridgeStore,
+        widget.authService,
+      ]),
       builder: (context, _) {
         final profile = widget.store.profile;
         final colorScheme = Theme.of(context).colorScheme;
+        final urgentFoodCount = widget.fridgeStore.foods
+            .where((food) => ExpiryHelper.isUrgentForReminder(food.expiryDate))
+            .length;
 
         if (_nameController.text != profile.name) {
           _nameController.text = profile.name;
@@ -747,6 +755,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 onChanged: (value) {
                   if (value != null) widget.store.updateGoal(value);
                 },
+              ),
+              const SizedBox(height: 12),
+              _ExpiryReminderCard(
+                isEnabled: widget.store.expiryRemindersEnabled,
+                urgentFoodCount: urgentFoodCount,
+                onChanged: widget.store.updateExpiryRemindersEnabled,
               ),
               const SizedBox(height: 24),
               const _SectionTitle(title: 'Équipements disponibles'),
@@ -950,6 +964,84 @@ class _SwitchCard extends StatelessWidget {
   }
 }
 
+class _ExpiryReminderCard extends StatelessWidget {
+  const _ExpiryReminderCard({
+    required this.isEnabled,
+    required this.urgentFoodCount,
+    required this.onChanged,
+  });
+
+  final bool isEnabled;
+  final int urgentFoodCount;
+  final ValueChanged<bool> onChanged;
+
+  String get _previewMessage {
+    if (!isEnabled) return 'Rappels désactivés';
+    if (urgentFoodCount == 0) {
+      return 'Aucun aliment urgent pour le moment';
+    }
+    if (urgentFoodCount == 1) {
+      return '1 aliment pourrait déclencher un rappel discret';
+    }
+    return '$urgentFoodCount aliments pourraient déclencher un rappel discret';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return _CardContainer(
+      child: Material(
+        color: Colors.transparent,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SwitchListTile(
+              value: isEnabled,
+              onChanged: onChanged,
+              contentPadding: EdgeInsets.zero,
+              secondary: Icon(
+                Icons.notifications_none_rounded,
+                color: colorScheme.primary,
+              ),
+              title: const Text(
+                'Rappels de péremption',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              subtitle: Text(
+                isEnabled ? 'Rappels activés' : 'Rappels désactivés',
+              ),
+            ),
+            Text(
+              _previewMessage,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onSurface,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Au maximum 1 rappel par jour, uniquement pour les aliments '
+              'à consommer aujourd’hui ou demain. Désactivable à tout moment.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Aucune notification système n’est encore envoyée.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 class _AuthCard extends StatelessWidget {
   const _AuthCard({
