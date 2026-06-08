@@ -1852,10 +1852,15 @@ class _RecipeDetailSheet extends StatelessWidget {
                       ),
                       child: Text(
                         available.isEmpty
-                            ? 'Pourquoi cette idée ? Elle correspond à un aliment repéré dans ton frigo, mais les quantités requises ne sont pas encore disponibles.'
+                            ? 'À compléter : les quantités disponibles ne '
+                                  'suffisent pas encore.'
                             : missing.isEmpty
-                                ? 'Pourquoi cette recette ? Tous les ingrédients requis sont disponibles dans ton frigo.'
-                                : 'Pourquoi cette recette ? Elle utilise ${_joinedIngredientNames(available)} et il ne manque que ${missing.map((match) => match.ingredient.label).join(', ')}.',
+                                ? 'Faisable maintenant : tous les ingrédients '
+                                      'sont dans ton frigo.'
+                                : 'Presque prête : utilise '
+                                      '${_joinedIngredientNames(available)}. '
+                                      'Il manque seulement '
+                                      '${missing.map((match) => match.ingredient.label).join(', ')}.',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: colorScheme.onSurface,
                           height: 1.4,
@@ -2008,7 +2013,8 @@ class _RecipeDetailSheet extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    'Après cuisson, tu pourras choisir de déduire les quantités utilisées du frigo.',
+                    'Après cuisson, choisis si tu veux déduire les quantités '
+                    'utilisées.',
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: colorScheme.onSurfaceVariant,
@@ -2018,7 +2024,7 @@ class _RecipeDetailSheet extends StatelessWidget {
                   FilledButton.icon(
                     onPressed: () => _onCooked(context),
                     icon: const Icon(Icons.restaurant_rounded),
-                    label: const Text('J’ai cuisiné · gérer mon frigo'),
+                    label: const Text('J’ai cuisiné'),
                     style: FilledButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(

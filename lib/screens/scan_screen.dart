@@ -344,7 +344,7 @@ class _ScanScreenState extends State<ScanScreen> {
     return Scaffold(
       backgroundColor: colorScheme.surfaceContainerLowest,
       appBar: AppBar(
-        title: const Text('Scan Ticket'),
+        title: const Text('Scanner un ticket'),
         centerTitle: false,
         elevation: 0,
         scrolledUnderElevation: 0,
@@ -415,7 +415,7 @@ class _ScanScreenState extends State<ScanScreen> {
           FilledButton.icon(
             onPressed: _isScanning ? null : _showImageSourceSheet,
             icon: const Icon(Icons.add_a_photo_rounded),
-            label: const Text('Choisir une image du ticket'),
+            label: const Text('Photographier ou choisir un ticket'),
             style: FilledButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(
@@ -529,6 +529,8 @@ class _AiDiagnosticSection extends StatelessWidget {
       listenable: historyStore,
       builder: (context, _) {
         final latestScan = historyStore.items.isEmpty ? null : historyStore.items.first;
+        if (latestScan == null) return const SizedBox.shrink();
+
         final theme = Theme.of(context);
         final colorScheme = theme.colorScheme;
 
@@ -560,12 +562,12 @@ class _AiDiagnosticSection extends StatelessWidget {
                       color: colorScheme.secondaryContainer.withValues(alpha: 0.55),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Icon(Icons.bug_report_outlined, color: colorScheme.secondary),
+                    child: Icon(Icons.info_outline_rounded, color: colorScheme.secondary),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'Diagnostic IA',
+                      'Détails du dernier scan',
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w800,
                       ),
@@ -574,35 +576,26 @@ class _AiDiagnosticSection extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 14),
-              if (latestScan == null)
-                Text(
-                  'Aucun scan analysé pour l’instant.',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                )
-              else ...[
-                _DiagnosticRow(label: 'Dernier scan', value: latestScan.sourceLabel),
-                _DiagnosticRow(label: 'Statut', value: latestScan.statusLabel),
-                _DiagnosticRow(
-                  label: 'Produits',
-                  value: '${latestScan.validatedCount}/${latestScan.detectedCount} validés',
-                ),
-                if (latestScan.model != null && latestScan.model!.trim().isNotEmpty)
-                  _DiagnosticRow(label: 'Modèle', value: latestScan.model!),
-                if (latestScan.usedFallback)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Text(
-                      'Le service d’analyse était indisponible. '
-                      'L’app a utilisé le mode démo de secours.',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.error,
-                        fontWeight: FontWeight.w600,
-                      ),
+              _DiagnosticRow(label: 'Source', value: latestScan.sourceLabel),
+              _DiagnosticRow(label: 'Résultat', value: latestScan.statusLabel),
+              _DiagnosticRow(
+                label: 'Produits',
+                value: '${latestScan.validatedCount}/${latestScan.detectedCount} validés',
+              ),
+              if (latestScan.model != null && latestScan.model!.trim().isNotEmpty)
+                _DiagnosticRow(label: 'Service', value: latestScan.model!),
+              if (latestScan.usedFallback)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    'Le service d’analyse était indisponible. '
+                    'L’app a utilisé le mode démo de secours.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colorScheme.error,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-              ],
+                ),
             ],
           ),
         );
@@ -704,7 +697,8 @@ class _RecentScansSection extends StatelessWidget {
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        'Aucun scan pour l’instant. Les tickets validés apparaîtront ici.',
+                        'Aucun scan pour l’instant. Tes tickets validés '
+                        'apparaîtront ici.',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: colorScheme.onSurfaceVariant,
                         ),

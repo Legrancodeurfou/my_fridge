@@ -231,7 +231,7 @@ class _FridgeScreenState extends State<FridgeScreen> {
     return Scaffold(
       backgroundColor: colorScheme.surfaceContainerLowest,
       appBar: AppBar(
-        title: const Text('Mon Frigo'),
+        title: const Text('Mon frigo'),
         centerTitle: false,
         elevation: 0,
         scrolledUnderElevation: 0,
@@ -640,7 +640,7 @@ class _EmptyFridgeView extends StatelessWidget {
           ),
           const SizedBox(height: 28),
           Text(
-            'Votre frigo est vide',
+            'Ton frigo est vide',
             textAlign: TextAlign.center,
             style: theme.textTheme.headlineSmall?.copyWith(
               fontWeight: FontWeight.w800,
@@ -649,7 +649,8 @@ class _EmptyFridgeView extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            'Ajoutez vos premiers aliments pour suivre leurs dates de péremption et limiter le gaspillage.',
+            'Ajoute tes premiers aliments pour suivre leurs dates de '
+            'péremption et limiter le gaspillage.',
             textAlign: TextAlign.center,
             style: theme.textTheme.bodyLarge?.copyWith(
               color: colorScheme.onSurfaceVariant,
@@ -1540,4 +1541,3 @@ class _FridgeQuantityStepper extends StatelessWidget {
     );
   }
 }
-
