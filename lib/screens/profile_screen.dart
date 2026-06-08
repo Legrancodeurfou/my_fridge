@@ -793,6 +793,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 onChanged: widget.store.updateThermomix,
               ),
               const SizedBox(height: 24),
+              const _SectionTitle(title: 'Données et confidentialité'),
+              const SizedBox(height: 8),
+              const _InfoCard(
+                icon: Icons.privacy_tip_outlined,
+                title: 'Tes données, simplement',
+                subtitle:
+                    'Le frigo, les courses et les données de recettes sont '
+                    'conservés localement, puis synchronisés dans le cloud si '
+                    'tu es connecté.\n\nL’image d’un ticket est envoyée à un '
+                    'service d’analyse IA pour détecter les produits. Rien '
+                    'n’est ajouté au frigo sans ta validation.\n\nLes rappels '
+                    'de péremption restent un aperçu : aucune notification '
+                    'système n’est encore envoyée. Sans compte connecté, '
+                    'l’application reste utilisable en mode local.',
+              ),
+              const SizedBox(height: 24),
               const _SectionTitle(title: 'Données de test'),
               const SizedBox(height: 8),
               _ResetDataCard(
