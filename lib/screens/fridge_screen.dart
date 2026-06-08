@@ -1334,10 +1334,12 @@ class _FoodFormSheetState extends State<_FoodFormSheet> {
                         onChanged: (value) {
                           if (value == null) return;
                           setState(() {
+                            _amount = MeasurementHelper.amountAfterUnitChange(
+                              _amount,
+                              fromUnit: _unit,
+                              toUnit: value,
+                            );
                             _unit = value;
-                            if (_amount < MeasurementHelper.stepFor(_unit)) {
-                              _amount = MeasurementHelper.stepFor(_unit);
-                            }
                           });
                         },
                       ),

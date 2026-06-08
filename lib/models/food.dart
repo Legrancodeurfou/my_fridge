@@ -98,9 +98,46 @@ class FoodItem {
 abstract final class MeasurementHelper {
   static const units = ['g', 'kg', 'ml', 'cl', 'l', 'unité', 'tranche'];
 
+  static String normalizeUnit(String unit) {
+    return unit
+        .trim()
+        .toLowerCase()
+        .replaceAll('unités', 'unité')
+        .replaceAll('tranches', 'tranche');
+  }
+
+  static bool areCompatible(String firstUnit, String secondUnit) {
+    final firstDimension = _dimensionFor(firstUnit);
+    return firstDimension != null &&
+        firstDimension == _dimensionFor(secondUnit);
+  }
+
+  static double? convertAmount(
+    double amount, {
+    required String fromUnit,
+    required String toUnit,
+  }) {
+    final from = normalizeUnit(fromUnit);
+    final to = normalizeUnit(toUnit);
+
+    if (!areCompatible(from, to)) return null;
+
+    final amountInBaseUnit = amount * _factorToBaseUnit(from);
+    return amountInBaseUnit / _factorToBaseUnit(to);
+  }
+
+  static double amountAfterUnitChange(
+    double amount, {
+    required String fromUnit,
+    required String toUnit,
+  }) {
+    return convertAmount(amount, fromUnit: fromUnit, toUnit: toUnit) ??
+        stepFor(toUnit);
+  }
+
   static String label(double amount, String unit) {
     final formattedAmount = inputValue(amount);
-    final displayUnit = _pluralize(unit, amount);
+    final displayUnit = _pluralize(normalizeUnit(unit), amount);
     return '$formattedAmount $displayUnit';
   }
 
@@ -108,11 +145,14 @@ abstract final class MeasurementHelper {
     if (amount == amount.roundToDouble()) {
       return amount.round().toString();
     }
-    return amount.toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '');
+    return amount
+        .toStringAsFixed(3)
+        .replaceFirst(RegExp(r'0+$'), '')
+        .replaceFirst(RegExp(r'\.$'), '');
   }
 
   static double stepFor(String unit) {
-    return switch (unit) {
+    return switch (normalizeUnit(unit)) {
       'g' => 50,
       'kg' => 0.1,
       'ml' => 50,
@@ -125,10 +165,30 @@ abstract final class MeasurementHelper {
   }
 
   static int logicalQuantity(double amount, String unit) {
-    if (unit == 'unité' || unit == 'tranche') {
+    final normalizedUnit = normalizeUnit(unit);
+    if (normalizedUnit == 'unité' || normalizedUnit == 'tranche') {
       return amount.round().clamp(1, 9999);
     }
     return 1;
+  }
+
+  static String? _dimensionFor(String unit) {
+    return switch (normalizeUnit(unit)) {
+      'g' || 'kg' => 'mass',
+      'ml' || 'cl' || 'l' => 'volume',
+      'unité' => 'unit',
+      'tranche' => 'slice',
+      _ => null,
+    };
+  }
+
+  static double _factorToBaseUnit(String unit) {
+    return switch (normalizeUnit(unit)) {
+      'kg' => 1000,
+      'cl' => 10,
+      'l' => 1000,
+      _ => 1,
+    };
   }
 
   static String _pluralize(String unit, double amount) {

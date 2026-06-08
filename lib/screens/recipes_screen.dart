@@ -294,8 +294,18 @@ class RecipeIngredientMatch {
   bool get hasFoodInFridge => matchedFoodId != null;
 
   double get missingAmount {
-    final amount = matchedFoodAmount ?? 0;
-    final missing = ingredient.requiredAmount - amount;
+    final amount = matchedFoodAmount;
+    final unit = matchedFoodUnit;
+    if (amount == null || unit == null) return ingredient.requiredAmount;
+
+    final availableInRequiredUnit = MeasurementHelper.convertAmount(
+      amount,
+      fromUnit: unit,
+      toUnit: ingredient.requiredUnit,
+    );
+    if (availableInRequiredUnit == null) return ingredient.requiredAmount;
+
+    final missing = ingredient.requiredAmount - availableInRequiredUnit;
     return missing < 0 ? 0 : missing;
   }
 
@@ -306,11 +316,17 @@ class RecipeIngredientMatch {
   String get fridgeDisplayLabel {
     if (matchedFoodName == null) return requiredDisplayLabel;
 
-    if (matchedFoodUnit != null &&
-        RecipeCatalog.normalizeUnitForDisplay(matchedFoodUnit!) ==
-            RecipeCatalog.normalizeUnitForDisplay(ingredient.requiredUnit) &&
-        matchedFoodAmount != null) {
-      final current = MeasurementHelper.inputValue(matchedFoodAmount!);
+    final availableInRequiredUnit =
+        matchedFoodUnit == null || matchedFoodAmount == null
+        ? null
+        : MeasurementHelper.convertAmount(
+            matchedFoodAmount!,
+            fromUnit: matchedFoodUnit!,
+            toUnit: ingredient.requiredUnit,
+          );
+
+    if (availableInRequiredUnit != null) {
+      final current = MeasurementHelper.inputValue(availableInRequiredUnit);
       final required = MeasurementHelper.inputValue(ingredient.requiredAmount);
       final unit = MeasurementHelper.label(ingredient.requiredAmount, ingredient.requiredUnit)
           .replaceFirst(required, '')
@@ -853,15 +869,20 @@ abstract final class RecipeCatalog {
         return ingredient.keywords.any((keyword) => name.contains(keyword));
       }).toList();
 
+      FoodItem? compatibleFallbackFood;
       FoodItem? fallbackFood;
 
       for (final food in matchingFoods) {
         final isExpired =
             ExpiryHelper.urgencyFor(food.expiryDate) == ExpiryUrgency.expired;
+        final availableInRequiredUnit = MeasurementHelper.convertAmount(
+          food.amount,
+          fromUnit: food.unit,
+          toUnit: ingredient.requiredUnit,
+        );
         final hasEnough =
-            normalizeUnitForDisplay(food.unit) ==
-                normalizeUnitForDisplay(ingredient.requiredUnit) &&
-            food.amount >= ingredient.requiredAmount;
+            availableInRequiredUnit != null &&
+            availableInRequiredUnit >= ingredient.requiredAmount;
 
         if (!isExpired && hasEnough) {
           return RecipeIngredientMatch(
@@ -877,17 +898,21 @@ abstract final class RecipeCatalog {
 
         if (!isExpired) {
           fallbackFood ??= food;
+          if (availableInRequiredUnit != null) {
+            compatibleFallbackFood ??= food;
+          }
         }
       }
 
+      final bestFallbackFood = compatibleFallbackFood ?? fallbackFood;
       return RecipeIngredientMatch(
         ingredient: ingredient,
         isAvailable: false,
-        matchedFoodName: fallbackFood?.name,
-        matchedFoodId: fallbackFood?.id,
-        matchedFoodAmount: fallbackFood?.amount,
-        matchedFoodUnit: fallbackFood?.unit,
-        matchedFoodAmountLabel: fallbackFood?.amountLabel,
+        matchedFoodName: bestFallbackFood?.name,
+        matchedFoodId: bestFallbackFood?.id,
+        matchedFoodAmount: bestFallbackFood?.amount,
+        matchedFoodUnit: bestFallbackFood?.unit,
+        matchedFoodAmountLabel: bestFallbackFood?.amountLabel,
       );
     }).toList();
   }
@@ -911,12 +936,21 @@ abstract final class RecipeCatalog {
 
     for (final match in matchIngredients(recipe, foods)) {
       if (!match.isAvailable || match.matchedFoodId == null) continue;
-      result[match.matchedFoodId!] = match.ingredient.requiredAmount.toDouble();
+      final amountInFoodUnit = MeasurementHelper.convertAmount(
+        match.ingredient.requiredAmount,
+        fromUnit: match.ingredient.requiredUnit,
+        toUnit: match.matchedFoodUnit!,
+      );
+      if (amountInFoodUnit == null) continue;
+      result.update(
+        match.matchedFoodId!,
+        (amount) => amount + amountInFoodUnit,
+        ifAbsent: () => amountInFoodUnit,
+      );
     }
 
     return result;
   }
-
 
   static List<ShoppingItem> missingShoppingItems(
     RecipeSuggestion recipe,
@@ -1009,12 +1043,8 @@ abstract final class RecipeCatalog {
   }
 
   static String normalizeUnitForDisplay(String unit) {
-  return unit
-      .trim()
-      .toLowerCase()
-      .replaceAll('unités', 'unité')
-      .replaceAll('tranches', 'tranche');
-}
+    return MeasurementHelper.normalizeUnit(unit);
+  }
 
   static bool _hasAny(List<String> foodNames, List<String> keywords) {
     return keywords.any(
@@ -1564,29 +1594,38 @@ class _RecipeDetailSheet extends StatelessWidget {
     final missingItems = RecipeCatalog.missingShoppingItems(recipe, store.foods);
     if (missingItems.isEmpty) return;
 
-    final newItems = missingItems
-        .where((item) => !shoppingListStore.containsEquivalent(item))
-        .toList();
-    final existingCount = missingItems.length - newItems.length;
+    final itemsToAdd = <ShoppingItem>[];
+    var alreadySufficientCount = 0;
+    var complementedCount = 0;
 
-    if (newItems.isNotEmpty) {
-      shoppingListStore.addItems(newItems);
+    for (final item in missingItems) {
+      final missingAmount = shoppingListStore.missingAmountFor(item);
+      if (missingAmount <= 0) {
+        alreadySufficientCount++;
+        continue;
+      }
+
+      if (missingAmount < item.amount) complementedCount++;
+      itemsToAdd.add(item.copyWith(amount: missingAmount));
     }
 
-    final message = switch ((newItems.length, existingCount)) {
-      (0, _) =>
-        'Ces ingrédients sont déjà dans ta liste de courses. '
-            'Les quantités restent inchangées.',
-      (final added, 0) =>
-        '$added ingrédient${added > 1 ? 's' : ''} '
-            'ajouté${added > 1 ? 's' : ''} à la liste de courses.',
-      (final added, final existing) =>
-        '$added ingrédient${added > 1 ? 's' : ''} '
-            'ajouté${added > 1 ? 's' : ''}. '
-            '$existing déjà présent${existing > 1 ? 's' : ''}, '
-            'quantité${existing > 1 ? 's' : ''} inchangée'
-            '${existing > 1 ? 's' : ''}.',
-    };
+    if (itemsToAdd.isNotEmpty) {
+      shoppingListStore.addItemsUsingCompatibleUnits(itemsToAdd);
+    }
+
+    final addedCount = itemsToAdd.length - complementedCount;
+    final updates = <String>[
+      if (addedCount > 0)
+        '$addedCount ingrédient${addedCount > 1 ? 's ajoutés' : ' ajouté'}',
+      if (complementedCount > 0)
+        '$complementedCount quantité'
+            '${complementedCount > 1 ? 's complétées' : ' complétée'}',
+    ];
+    final message = itemsToAdd.isEmpty
+        ? 'Ces ingrédients sont déjà dans ta liste de courses. '
+            'Les quantités sont suffisantes.'
+        : '${updates.join(', ')} dans la liste de courses.'
+            '${alreadySufficientCount > 0 ? ' $alreadySufficientCount déjà suffisant${alreadySufficientCount > 1 ? 's' : ''}.' : ''}';
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(

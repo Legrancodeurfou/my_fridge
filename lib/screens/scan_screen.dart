@@ -1204,7 +1204,14 @@ class _ScanValidationSheetState extends State<_ScanValidationSheet> {
     setState(() {
       _items = _items.map((draft) {
         if (draft.id != id) return draft;
-        return draft.copyWith(unit: unit);
+        return draft.copyWith(
+          amount: MeasurementHelper.amountAfterUnitChange(
+            draft.amount,
+            fromUnit: draft.unit,
+            toUnit: unit,
+          ),
+          unit: unit,
+        );
       }).toList();
     });
   }
@@ -1878,8 +1885,12 @@ class _ManualFoodFormSheetState extends State<_ManualFoodFormSheet> {
                         onChanged: (value) {
                           if (value == null) return;
                           setState(() {
+                            _amount = MeasurementHelper.amountAfterUnitChange(
+                              _amount,
+                              fromUnit: _unit,
+                              toUnit: value,
+                            );
                             _unit = value;
-                            if (_amount <= 0) _amount = MeasurementHelper.stepFor(_unit);
                           });
                         },
                       ),

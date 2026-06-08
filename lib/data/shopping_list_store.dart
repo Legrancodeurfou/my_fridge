@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/food.dart';
 import '../models/shopping_item.dart';
 
 class ShoppingListStore extends ChangeNotifier {
@@ -16,6 +17,28 @@ class ShoppingListStore extends ChangeNotifier {
 
   bool containsEquivalent(ShoppingItem item) {
     return _items.any((existingItem) => _canMerge(existingItem, item));
+  }
+
+  double missingAmountFor(ShoppingItem desiredItem) {
+    var availableInDesiredUnit = 0.0;
+
+    for (final existingItem in _items) {
+      if (_normalize(existingItem.name) != _normalize(desiredItem.name)) {
+        continue;
+      }
+
+      final converted = MeasurementHelper.convertAmount(
+        existingItem.amount,
+        fromUnit: existingItem.unit,
+        toUnit: desiredItem.unit,
+      );
+      if (converted != null) {
+        availableInDesiredUnit += converted;
+      }
+    }
+
+    final missing = desiredItem.amount - availableInDesiredUnit;
+    return missing > 0 ? missing : 0;
   }
 
   static Future<ShoppingListStore> load() async {
@@ -49,6 +72,40 @@ class ShoppingListStore extends ChangeNotifier {
     var updatedItems = _items;
     for (final item in items) {
       updatedItems = _addOrMergeItem(updatedItems, item);
+    }
+
+    _items = updatedItems;
+    notifyListeners();
+    _save();
+  }
+
+  void addItemsUsingCompatibleUnits(List<ShoppingItem> items) {
+    if (items.isEmpty) return;
+
+    var updatedItems = _items;
+    for (final item in items) {
+      final compatibleIndex = updatedItems.indexWhere(
+        (existingItem) =>
+            _normalize(existingItem.name) == _normalize(item.name) &&
+            MeasurementHelper.areCompatible(existingItem.unit, item.unit),
+      );
+
+      if (compatibleIndex == -1) {
+        updatedItems = _addOrMergeItem(updatedItems, item);
+        continue;
+      }
+
+      final existingItem = updatedItems[compatibleIndex];
+      final amountInExistingUnit = MeasurementHelper.convertAmount(
+        item.amount,
+        fromUnit: item.unit,
+        toUnit: existingItem.unit,
+      )!;
+      updatedItems = [...updatedItems];
+      updatedItems[compatibleIndex] = existingItem.copyWith(
+        amount: existingItem.amount + amountInExistingUnit,
+        isChecked: false,
+      );
     }
 
     _items = updatedItems;
@@ -136,16 +193,9 @@ class ShoppingListStore extends ChangeNotifier {
 
   static bool _canMerge(ShoppingItem a, ShoppingItem b) {
     return _normalize(a.name) == _normalize(b.name) &&
-        _normalizeUnit(a.unit) == _normalizeUnit(b.unit);
+        MeasurementHelper.normalizeUnit(a.unit) ==
+            MeasurementHelper.normalizeUnit(b.unit);
   }
 
   static String _normalize(String value) => value.trim().toLowerCase();
-
-  static String _normalizeUnit(String value) {
-    return value
-        .trim()
-        .toLowerCase()
-        .replaceAll('unités', 'unité')
-        .replaceAll('tranches', 'tranche');
-  }
 }
