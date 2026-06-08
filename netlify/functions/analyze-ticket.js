@@ -1,4 +1,7 @@
 const MODEL = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
+const MAX_BODY_BYTES = 8 * 1024 * 1024;
+const MAX_IMAGE_BASE64_LENGTH = 7 * 1024 * 1024;
+const GEMINI_TIMEOUT_MS = 25_000;
 
 const PROMPT = `
 Analyse cette image de ticket de caisse.
@@ -51,40 +54,61 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'Content-Type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Max-Age': '86400',
 };
 
 exports.handler = async (event) => {
-  if (event.httpMethod === 'OPTIONS') {
+  const method = event.httpMethod?.toUpperCase();
+
+  if (method === 'OPTIONS') {
     return {
-      statusCode: 200,
+      statusCode: 204,
       headers: corsHeaders,
       body: '',
     };
   }
 
-  if (event.httpMethod !== 'POST') {
-    return jsonResponse(405, { error: 'Method not allowed' });
+  if (method !== 'POST') {
+    return jsonResponse(405, { error: 'Méthode non autorisée.' });
   }
 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    return jsonResponse(500, {
-      error: 'GEMINI_API_KEY is missing in Netlify environment variables.',
+    console.error('GEMINI_API_KEY is missing.');
+    return jsonResponse(503, {
+      error: 'Le service d’analyse est temporairement indisponible.',
+    });
+  }
+
+  const rawBody = event.body || '';
+  if (Buffer.byteLength(rawBody, 'utf8') > MAX_BODY_BYTES) {
+    return jsonResponse(413, {
+      error: 'L’image envoyée est trop volumineuse.',
     });
   }
 
   let payload;
   try {
-    payload = JSON.parse(event.body || '{}');
+    payload = JSON.parse(rawBody);
   } catch (_) {
-    return jsonResponse(400, { error: 'Invalid JSON body.' });
+    return jsonResponse(400, { error: 'Le contenu envoyé est invalide.' });
+  }
+
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return jsonResponse(400, { error: 'Le contenu envoyé est invalide.' });
   }
 
   const imageBase64 = payload.imageBase64;
   const mimeType = payload.mimeType || 'image/jpeg';
 
-  if (!imageBase64 || typeof imageBase64 !== 'string') {
-    return jsonResponse(400, { error: 'imageBase64 is required.' });
+  if (typeof imageBase64 !== 'string' || imageBase64.trim().length === 0) {
+    return jsonResponse(400, { error: 'Aucune image valide n’a été envoyée.' });
+  }
+
+  if (imageBase64.length > MAX_IMAGE_BASE64_LENGTH) {
+    return jsonResponse(413, {
+      error: 'L’image envoyée est trop volumineuse.',
+    });
   }
 
   try {
@@ -103,49 +127,61 @@ exports.handler = async (event) => {
       products,
     });
   } catch (error) {
-    return jsonResponse(500, {
-      error: error.message || 'Gemini analysis failed.',
+    console.error('Ticket analysis failed:', error);
+
+    const timedOut = error?.name === 'AbortError';
+    return jsonResponse(timedOut ? 504 : 502, {
+      error: timedOut
+        ? 'Le service d’analyse met trop de temps à répondre.'
+        : 'Le service d’analyse est temporairement indisponible.',
     });
   }
 };
 
 async function callGemini({ apiKey, imageBase64, mimeType }) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      contents: [
-        {
-          role: 'user',
-          parts: [
-            { text: PROMPT },
-            {
-              inline_data: {
-                mime_type: mimeType,
-                data: imageBase64,
-              },
-            },
-          ],
-        },
-      ],
-      generationConfig: {
-        temperature: 0,
-        response_mime_type: 'application/json',
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
       },
-    }),
-  });
+      signal: controller.signal,
+      body: JSON.stringify({
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              { text: PROMPT },
+              {
+                inline_data: {
+                  mime_type: mimeType,
+                  data: imageBase64,
+                },
+              },
+            ],
+          },
+        ],
+        generationConfig: {
+          temperature: 0,
+          response_mime_type: 'application/json',
+        },
+      }),
+    });
 
-  const text = await response.text();
+    const text = await response.text();
 
-  if (!response.ok) {
-    throw new Error(`Gemini API error ${response.status}: ${text}`);
+    if (!response.ok) {
+      throw new Error(`Gemini API error ${response.status}: ${text}`);
+    }
+
+    return JSON.parse(text);
+  } finally {
+    clearTimeout(timeout);
   }
-
-  return JSON.parse(text);
 }
 
 function extractGeminiText(response) {
@@ -322,6 +358,7 @@ function jsonResponse(statusCode, body) {
     headers: {
       ...corsHeaders,
       'Content-Type': 'application/json',
+      'Cache-Control': 'no-store',
     },
     body: JSON.stringify(body),
   };
