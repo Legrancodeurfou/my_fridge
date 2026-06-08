@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/foundation.dart';
-import 'package:file_picker/file_picker.dart';
 
 import '../data/fridge_store.dart';
 import '../data/scan_history_store.dart';
@@ -117,25 +116,6 @@ class _ScanScreenState extends State<ScanScreen> {
 
   Future<void> _pickImage(ImageSource source) async {
     try {
-      if (kIsWeb) {
-        final result = await FilePicker.platform.pickFiles(
-          type: FileType.image,
-          withData: true,
-        );
-
-        if (!mounted) return;
-        if (result == null || result.files.isEmpty) return;
-
-        final bytes = result.files.first.bytes;
-
-        if (bytes == null || bytes.isEmpty) {
-          throw Exception('Image vide ou illisible');
-        }
-
-        setState(() => _pickedImageBytes = bytes);
-        return;
-      }
-
       final image = await _imagePicker.pickImage(
         source: source,
         imageQuality: 85,

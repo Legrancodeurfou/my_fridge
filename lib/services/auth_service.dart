@@ -6,6 +6,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'supabase_service.dart';
 
 class AuthService extends ChangeNotifier {
+  static const _androidAuthRedirectUrl =
+      'com.myfridge.app://login-callback';
+
   AuthService() {
     _initialize();
   }
@@ -78,7 +81,11 @@ class AuthService extends ChangeNotifier {
 
       await SupabaseService.client.auth.signInWithOAuth(
         OAuthProvider.google,
-        redirectTo: kIsWeb ? Uri.base.origin : null,
+        redirectTo: kIsWeb
+            ? Uri.base.origin
+            : defaultTargetPlatform == TargetPlatform.android
+            ? _androidAuthRedirectUrl
+            : null,
       );
     } catch (error) {
       _errorMessage = 'Connexion Google impossible : $error';

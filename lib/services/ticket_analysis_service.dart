@@ -51,13 +51,17 @@ class TicketAnalysisReport {
 class TicketAnalysisService {
   const TicketAnalysisService({
     this.mode = TicketAnalysisMode.gemini,
-    this.endpoint = _defaultFunctionEndpoint,
+    this.endpoint,
   });
 
-  static const _defaultFunctionEndpoint = '/.netlify/functions/analyze-ticket';
+  static const _webFunctionEndpoint =
+      '/.netlify/functions/analyze-ticket';
+  static const _netlifyFunctionsBaseUrl = String.fromEnvironment(
+    'NETLIFY_FUNCTIONS_BASE_URL',
+  );
 
   final TicketAnalysisMode mode;
-  final String endpoint;
+  final String? endpoint;
 
   /// Analyse l'image et renvoie seulement les produits.
   /// Garde cette méthode pour compatibilité avec le reste de l'app.
@@ -96,7 +100,7 @@ class TicketAnalysisService {
     final idPrefix = 'gemini_${now.microsecondsSinceEpoch}';
 
     final responseText = await postAnalyzeTicket(
-      endpoint,
+      _resolvedEndpoint,
       {
         'imageBase64': base64Encode(imageBytes),
         'mimeType': 'image/jpeg',
@@ -122,6 +126,26 @@ class TicketAnalysisService {
       source: TicketAnalysisSource.gemini,
       model: model,
     );
+  }
+
+  String get _resolvedEndpoint {
+    final customEndpoint = endpoint?.trim();
+    if (customEndpoint != null && customEndpoint.isNotEmpty) {
+      return customEndpoint;
+    }
+
+    if (kIsWeb) return _webFunctionEndpoint;
+
+    final baseUrl = _netlifyFunctionsBaseUrl.trim();
+    final uri = Uri.tryParse(baseUrl);
+    if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) {
+      throw StateError(
+        'NETLIFY_FUNCTIONS_BASE_URL doit contenir une URL HTTPS valide.',
+      );
+    }
+
+    return '${baseUrl.replaceAll(RegExp(r'/+$'), '')}'
+        '$_webFunctionEndpoint';
   }
 
   TicketAnalysisResult _simulateAnalysis(Uint8List imageBytes) {
