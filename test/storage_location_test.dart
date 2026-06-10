@@ -27,6 +27,8 @@ void main() {
     expect(StorageLocationHelper.fromName(null), StorageLocation.fridge);
     expect(StorageLocationHelper.fromName('unknown'), StorageLocation.fridge);
     expect(StorageLocationHelper.fromName('freezer'), StorageLocation.freezer);
+    expect(StorageLocationHelper.label(StorageLocation.pantry), 'Placard');
+    expect(StorageLocationHelper.label(StorageLocation.spices), 'Épices');
   });
 
   test('la conversion cloud conserve ou initialise l’emplacement', () {

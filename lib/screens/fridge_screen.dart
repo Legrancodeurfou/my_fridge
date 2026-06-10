@@ -30,6 +30,7 @@ class _FridgeScreenState extends State<FridgeScreen> {
   final _searchController = TextEditingController();
   final Set<String> _selectedFoodIds = {};
   String _searchQuery = '';
+  StorageLocation? _selectedLocation;
   bool _isSelectionMode = false;
 
   @override
@@ -51,10 +52,31 @@ class _FridgeScreenState extends State<FridgeScreen> {
   }
 
   List<FoodItem> _filteredFoods(List<FoodItem> allFoods) {
-    if (_searchQuery.isEmpty) return allFoods;
+    return allFoods.where((food) {
+      final matchesLocation =
+          _selectedLocation == null ||
+          food.storageLocation == _selectedLocation;
+      final matchesSearch =
+          _searchQuery.isEmpty ||
+          food.name.toLowerCase().contains(_searchQuery);
+      return matchesLocation && matchesSearch;
+    }).toList();
+  }
+
+  List<FoodItem> _foodsForSelectedLocation(List<FoodItem> allFoods) {
+    if (_selectedLocation == null) return allFoods;
     return allFoods
-        .where((food) => food.name.toLowerCase().contains(_searchQuery))
+        .where((food) => food.storageLocation == _selectedLocation)
         .toList();
+  }
+
+  void _selectLocation(StorageLocation? location) {
+    if (_selectedLocation == location) return;
+    setState(() {
+      _selectedLocation = location;
+      _isSelectionMode = false;
+      _selectedFoodIds.clear();
+    });
   }
 
   void _onAddFood() {
@@ -206,7 +228,7 @@ class _FridgeScreenState extends State<FridgeScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         content: Text(
           isFullyConsumed
-              ? '${food.name} retiré du frigo'
+              ? '${food.name} retiré du stock'
               : '${MeasurementHelper.label(amountToConsume, food.unit)} consommé',
         ),
       ),
@@ -226,7 +248,7 @@ class _FridgeScreenState extends State<FridgeScreen> {
     messenger.clearSnackBars();
     messenger.showSnackBar(
       SnackBar(
-        content: Text('${food.name} supprimé du frigo'),
+        content: Text('${food.name} supprimé du stock'),
         action: SnackBarAction(
           label: 'Annuler',
           onPressed: () {
@@ -264,7 +286,7 @@ class _FridgeScreenState extends State<FridgeScreen> {
                   ),
                   content: Text(
                     foodToEdit == null
-                        ? '${food.name} ajouté au frigo'
+                        ? '${food.name} ajouté au stock'
                         : '${food.name} modifié',
                   ),
                 ),
@@ -288,8 +310,9 @@ class _FridgeScreenState extends State<FridgeScreen> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final allFoods = widget.store.foods;
+    final locationFoods = _foodsForSelectedLocation(allFoods);
     final filteredFoods = _filteredFoods(allFoods);
-    final stats = FridgeStats.fromItems(allFoods);
+    final stats = FridgeStats.fromItems(locationFoods);
     final isFridgeEmpty = allFoods.isEmpty;
     final hasSearchResults = filteredFoods.isNotEmpty;
     final selectedCount = _selectedFoodIds
@@ -367,13 +390,23 @@ class _FridgeScreenState extends State<FridgeScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _SearchField(controller: _searchController),
+                        const SizedBox(height: 12),
+                        _StorageFilterBar(
+                          foods: allFoods,
+                          selectedLocation: _selectedLocation,
+                          onSelected: _selectLocation,
+                        ),
                         const SizedBox(height: 16),
                         _StatsCard(stats: stats),
                         const SizedBox(height: 8),
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           child: Text(
-                            'Aliments disponibles',
+                            _selectedLocation == null
+                                ? 'Tous les aliments'
+                                : StorageLocationHelper.label(
+                                    _selectedLocation!,
+                                  ),
                             style: theme.textTheme.titleLarge?.copyWith(
                               fontWeight: FontWeight.w700,
                               letterSpacing: -0.3,
@@ -389,6 +422,7 @@ class _FridgeScreenState extends State<FridgeScreen> {
                     hasScrollBody: false,
                     child: _NoSearchResultsView(
                       query: _searchController.text.trim(),
+                      selectedLocation: _selectedLocation,
                     ),
                   )
                 else
@@ -472,6 +506,57 @@ class _SearchField extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide(color: colorScheme.primary, width: 1.5),
         ),
+      ),
+    );
+  }
+}
+
+class _StorageFilterBar extends StatelessWidget {
+  const _StorageFilterBar({
+    required this.foods,
+    required this.selectedLocation,
+    required this.onSelected,
+  });
+
+  final List<FoodItem> foods;
+  final StorageLocation? selectedLocation;
+  final ValueChanged<StorageLocation?> onSelected;
+
+  int _countFor(StorageLocation? location) {
+    if (location == null) return foods.length;
+    return foods.where((food) => food.storageLocation == location).length;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final locations = <StorageLocation?>[null, ...StorageLocation.values];
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          for (var index = 0; index < locations.length; index++) ...[
+            if (index > 0) const SizedBox(width: 8),
+            ChoiceChip(
+              selected: selectedLocation == locations[index],
+              onSelected: (_) => onSelected(locations[index]),
+              avatar: Icon(
+                locations[index] == null
+                    ? Icons.apps_rounded
+                    : StorageLocationHelper.icon(locations[index]!),
+                size: 18,
+                color: selectedLocation == locations[index]
+                    ? colorScheme.onPrimaryContainer
+                    : colorScheme.onSurfaceVariant,
+              ),
+              label: Text(
+                '${locations[index] == null ? 'Tout' : StorageLocationHelper.label(locations[index]!)} '
+                '(${_countFor(locations[index])})',
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -724,6 +809,24 @@ class _FoodCard extends StatelessWidget {
                           ],
                         ),
                       ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Icon(
+                            StorageLocationHelper.icon(food.storageLocation),
+                            size: 15,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            StorageLocationHelper.label(food.storageLocation),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -939,6 +1042,12 @@ class _FoodDetailSheet extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               _DetailRow(
+                icon: StorageLocationHelper.icon(food.storageLocation),
+                label: 'Emplacement',
+                value: StorageLocationHelper.label(food.storageLocation),
+              ),
+              const SizedBox(height: 12),
+              _DetailRow(
                 icon: Icons.inventory_2_outlined,
                 label: 'Quantité',
                 value: food.amountLabel,
@@ -1126,7 +1235,7 @@ class _ConsumeAmountSheetState extends State<_ConsumeAmountSheet> {
                           const SizedBox(height: 4),
                           Text(
                             consumesAll
-                                ? 'L’aliment sera retiré du frigo.'
+                                ? 'L’aliment sera retiré du stock.'
                                 : 'Restera ${MeasurementHelper.label(remainingAmount, widget.food.unit)}.',
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: colorScheme.onSurfaceVariant,
@@ -1243,6 +1352,7 @@ class _FoodFormSheetState extends State<_FoodFormSheet> {
   late final TextEditingController _nameController;
 
   late FoodCategory _category;
+  late StorageLocation _storageLocation;
   late DateTime _expiryDate;
   late double _amount;
   late String _unit;
@@ -1255,6 +1365,7 @@ class _FoodFormSheetState extends State<_FoodFormSheet> {
     final food = widget.foodToEdit;
     _nameController = TextEditingController(text: food?.name ?? '');
     _category = food?.category ?? FoodCategory.other;
+    _storageLocation = food?.storageLocation ?? StorageLocation.fridge;
     _amount = food?.amount ?? 1;
     _unit = food?.unit ?? 'unité';
     _expiryDate =
@@ -1311,6 +1422,7 @@ class _FoodFormSheetState extends State<_FoodFormSheet> {
       emoji: FoodCategoryHelper.emoji(_category),
       expiryDate: _expiryDate,
       category: _category,
+      storageLocation: _storageLocation,
       quantity: MeasurementHelper.logicalQuantity(_amount, _unit),
       amount: _amount,
       unit: _unit,
@@ -1430,6 +1542,26 @@ class _FoodFormSheetState extends State<_FoodFormSheet> {
                       .toList(),
                   onChanged: (value) {
                     if (value != null) setState(() => _category = value);
+                  },
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<StorageLocation>(
+                  initialValue: _storageLocation,
+                  decoration: _sheetInputDecoration(
+                    context,
+                    label: 'Emplacement',
+                    prefixIcon: StorageLocationHelper.icon(_storageLocation),
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  items: StorageLocation.values.map((location) {
+                    return DropdownMenuItem(
+                      value: location,
+                      child: Text(StorageLocationHelper.label(location)),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() => _storageLocation = value);
                   },
                 ),
                 const SizedBox(height: 16),
@@ -1588,9 +1720,13 @@ class _FoodFormSheetState extends State<_FoodFormSheet> {
 }
 
 class _NoSearchResultsView extends StatelessWidget {
-  const _NoSearchResultsView({required this.query});
+  const _NoSearchResultsView({
+    required this.query,
+    required this.selectedLocation,
+  });
 
   final String query;
+  final StorageLocation? selectedLocation;
 
   @override
   Widget build(BuildContext context) {
@@ -1617,7 +1753,9 @@ class _NoSearchResultsView extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             query.isEmpty
-                ? 'Essayez un autre terme de recherche.'
+                ? selectedLocation == null
+                      ? 'Aucun aliment disponible pour le moment.'
+                      : 'Aucun aliment dans ${StorageLocationHelper.label(selectedLocation!).toLowerCase()}.'
                 : 'Aucun aliment ne correspond à « $query ».',
             textAlign: TextAlign.center,
             style: theme.textTheme.bodyMedium?.copyWith(

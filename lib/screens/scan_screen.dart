@@ -360,7 +360,7 @@ class _ScanScreenState extends State<ScanScreen> {
               widget.store.addFood(food);
               Navigator.pop(sheetContext);
 
-              _showScanSnackBar('${food.name} a été ajouté au frigo.');
+              _showScanSnackBar('${food.name} a été ajouté au stock.');
 
               widget.onNavigateToFridge();
             },
@@ -401,8 +401,8 @@ class _ScanScreenState extends State<ScanScreen> {
             final count = selectedFoods.length;
             _showScanSnackBar(
               count == 1
-                  ? '1 aliment validé et ajouté au frigo.'
-                  : '$count aliments validés et ajoutés au frigo.',
+                  ? '1 aliment validé et ajouté au stock.'
+                  : '$count aliments validés et ajoutés au stock.',
             );
 
             widget.onNavigateToFridge();
@@ -476,7 +476,7 @@ class _ScanScreenState extends State<ScanScreen> {
           const SizedBox(height: 12),
           Text(
             'Prends une photo ou choisis une image du ticket. Tu pourras '
-            'corriger chaque produit avant de l’ajouter au frigo.',
+            'corriger chaque produit avant de l’ajouter au stock.',
             textAlign: TextAlign.center,
             style: theme.textTheme.bodyLarge?.copyWith(
               color: colorScheme.onSurfaceVariant,
@@ -514,7 +514,7 @@ class _ScanScreenState extends State<ScanScreen> {
                           text:
                               'L’image du ticket est envoyée à un service '
                               'd’analyse IA pour détecter les produits. Rien '
-                              'n’est ajouté au frigo sans ta validation.',
+                              'n’est ajouté au stock sans ta validation.',
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: colorScheme.onPrimaryContainer,
                             height: 1.35,
@@ -1236,6 +1236,7 @@ class _ScanValidationSheet extends StatefulWidget {
 
 class _ScanValidationSheetState extends State<_ScanValidationSheet> {
   late List<DetectedProductDraft> _items;
+  StorageLocation _storageLocation = StorageLocation.fridge;
 
   @override
   void initState() {
@@ -1347,7 +1348,12 @@ class _ScanValidationSheetState extends State<_ScanValidationSheet> {
   }
 
   List<FoodItem> _foodsForFridge() {
-    return _items.map((draft) => draft.toFoodItem()).toList();
+    return _items
+        .map(
+          (draft) =>
+              draft.toFoodItem().copyWith(storageLocation: _storageLocation),
+        )
+        .toList();
   }
 
   int get _totalLines => _items.length;
@@ -1414,7 +1420,7 @@ class _ScanValidationSheetState extends State<_ScanValidationSheet> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Corrige la liste avant de l’ajouter au frigo.',
+                              'Corrige la liste avant de l’ajouter au stock.',
                               style: theme.textTheme.bodyMedium?.copyWith(
                                 color: colorScheme.onSurfaceVariant,
                               ),
@@ -1433,6 +1439,26 @@ class _ScanValidationSheetState extends State<_ScanValidationSheet> {
                       color: colorScheme.onSurfaceVariant,
                       height: 1.35,
                     ),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<StorageLocation>(
+                    initialValue: _storageLocation,
+                    decoration: InputDecoration(
+                      labelText: 'Emplacement pour ces produits',
+                      prefixIcon: Icon(
+                        StorageLocationHelper.icon(_storageLocation),
+                      ),
+                    ),
+                    items: StorageLocation.values.map((location) {
+                      return DropdownMenuItem(
+                        value: location,
+                        child: Text(StorageLocationHelper.label(location)),
+                      );
+                    }).toList(),
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setState(() => _storageLocation = value);
+                    },
                   ),
                   if (widget.usedFallback) ...[
                     const SizedBox(height: 10),

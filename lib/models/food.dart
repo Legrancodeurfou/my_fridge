@@ -10,6 +10,24 @@ abstract final class StorageLocationHelper {
   static StorageLocation fromName(String? value) {
     return StorageLocation.values.asNameMap()[value] ?? StorageLocation.fridge;
   }
+
+  static String label(StorageLocation location) {
+    return switch (location) {
+      StorageLocation.fridge => 'Frigo',
+      StorageLocation.freezer => 'Congélateur',
+      StorageLocation.pantry => 'Placard',
+      StorageLocation.spices => 'Épices',
+    };
+  }
+
+  static IconData icon(StorageLocation location) {
+    return switch (location) {
+      StorageLocation.fridge => Icons.kitchen_outlined,
+      StorageLocation.freezer => Icons.ac_unit_rounded,
+      StorageLocation.pantry => Icons.inventory_2_outlined,
+      StorageLocation.spices => Icons.spa_outlined,
+    };
+  }
 }
 
 class FoodItem {
