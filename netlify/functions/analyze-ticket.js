@@ -2,6 +2,9 @@ const MODEL = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
 const MAX_BODY_BYTES = 8 * 1024 * 1024;
 const MAX_IMAGE_BASE64_LENGTH = 7 * 1024 * 1024;
 const GEMINI_TIMEOUT_MS = 25_000;
+const {
+  normalizeShelfLifeDays,
+} = require('./shelf-life-estimator');
 
 const PROMPT = `
 Analyse cette image de ticket de caisse.
@@ -34,10 +37,30 @@ Unités autorisées uniquement : "g", "kg", "ml", "cl", "l", "unité", "tranche"
 Catégories autorisées uniquement : "dairy", "produce", "meat", "other".
 
 Règles très importantes :
-- N'invente jamais un poids, un volume ou un nombre de tranches si l'information n'est pas clairement visible sur le ticket.
+- Une quantité n'est valide que si elle est explicitement liée à la désignation du produit sur la même ligne ou dans son libellé : par exemple "500 g", "1 L", "x6" ou "6 tranches".
+- N'utilise jamais un chiffre provenant d'une colonne secondaire du ticket comme quantité : TVA, taux de taxe, prix unitaire, prix total de ligne, remise, pourcentage, code rayon ou référence.
+- La proximité visuelle avec une ligne produit ne suffit pas : un chiffre isolé sans unité ou multiplicateur clairement associé au produit n'est pas un grammage ni un nombre d'unités.
+- N'invente jamais un poids, un volume ou un nombre de tranches si l'information n'est pas clairement visible et rattachée au produit.
 - Si le poids, le volume ou le nombre précis n'est pas visible, retourne simplement : quantity = 1, amount = 1, unit = "unité".
+- En cas de doute sur l'unité ou sur l'origine d'un chiffre, préfère toujours quantity = 1, amount = 1, unit = "unité".
 - Pour les produits comme pâtes, riz, biscuits, chocolat, conserve, sauce, pain, fromage emballé : si le poids n'est pas visible, mets 1 unité. Ne mets pas 500 g par défaut.
 - Pour les produits naturellement comptables, garde le nombre uniquement s'il est visible ou clairement indiqué : œufs, yaourts, fruits, légumes, tranches de jambon, tranches de pain.
+- Ne convertis jamais un prix décimal, un taux de TVA ou un pourcentage en quantité, même si aucune autre quantité n'est visible.
+
+Exemples négatifs obligatoires :
+- Une colonne "TVA 5.5", "TVA 10" ou "TVA 20" ne doit jamais produire 5.5 g, 10 unités, 20 unités ou toute autre quantité.
+- Un prix "2.99" ou "2,99 €" ne doit jamais produire quantity = 2.99, amount = 2.99 ou 2.99 unités.
+- Un total de ligne, sous-total, montant de remise ou pourcentage ne doit jamais devenir quantity ou amount.
+- Ligne produit "FROMAGE ORIGINAL" avec TVA 20 et prix 2.99, sans grammage lisible => quantity = 1, amount = 1, unit = "unité".
+
+Règles de lecture du nom produit :
+- Préserve en priorité les mots et marques réellement visibles. Si le produit est ambigu, garde un nom proche du libellé original plutôt que de le transformer en un autre aliment.
+- Les abréviations "btr" ou "beurre" doivent être interprétées prudemment. "btr" seul ne suffit pas pour renommer un produit en "Beurre" si d'autres mots ou une marque indiquent autre chose.
+- "Leerdammer" et les marques ou mentions clairement associées au fromage doivent rester classées comme fromage, catégorie "dairy", même si une abréviation voisine semble évoquer du beurre.
+- Exemple : si "LEERDAMMER", "FROMAGE" ou une marque de fromage est visible avec "200 g", retourne un nom de fromage et 200 g ; ne retourne pas "Beurre".
+- Si seule une désignation ambiguë comme "200G BTR ORIGINAL" est lisible et qu'aucune identité produit fiable n'est visible, conserve un nom proche de "BTR Original" au lieu d'inventer "Beurre".
+
+Exemples positifs :
 - Exemple : "Jambon 6 tranches" visible => quantity = 6, amount = 6, unit = "tranche".
 - Exemple : "Jambon" sans nombre visible => quantity = 1, amount = 1, unit = "unité".
 - Exemple : "Riz" sans poids visible => quantity = 1, amount = 1, unit = "unité".
@@ -46,7 +69,11 @@ Règles très importantes :
 - "name" doit être lisible et simple en français. Exemple : "Crème fraîche" au lieu de "CREME FR 30%".
 - "quantity" = nombre d'unités logiques. Exemple : 6 œufs => 6, 500 g de pâtes => 1.
 - "amount" = quantité affichable. Exemple : 500 pour 500 g, 20 pour 20 cl, 6 pour 6 œufs.
-- "estimatedShelfLifeDays" doit être un nombre entier réaliste selon le produit.
+- "estimatedShelfLifeDays" est une estimation prudente, pas une vraie DLC. Elle doit être un nombre entier réaliste selon le produit.
+- Repères : jambon ou charcuterie sous vide environ 14 jours ; emmental, Leerdammer ou fromage emballé 30 à 45 jours ; roquefort ou fromage bleu 45 à 60 jours ; beurre 45 à 60 jours.
+- Repères : lait frais 7 à 10 jours ; yaourt 20 à 30 jours ; salade ou légumes frais 3 à 5 jours ; fruits 5 à 10 jours.
+- Repères : pâtes, riz, conserves, chips et biscuits plusieurs mois ; épices encore plus longtemps.
+- Si le produit est ambigu, choisis une durée raisonnable sans inventer une date précise ni utiliser un chiffre du ticket.
 - Si aucun produit alimentaire n'est détecté, retourne [].
 `;
 
@@ -329,27 +356,6 @@ function normalizeCategory(value) {
   const raw = cleanString(value).toLowerCase();
   const allowed = new Set(['dairy', 'produce', 'meat', 'other']);
   return allowed.has(raw) ? raw : 'other';
-}
-
-function normalizeShelfLifeDays(value, category, name) {
-  const number = Number(value);
-
-  if (Number.isFinite(number) && number >= 1 && number <= 730) {
-    return Math.round(number);
-  }
-
-  const lowerName = name.toLowerCase();
-
-  if (lowerName.includes('viande') || lowerName.includes('poulet') || lowerName.includes('steak') || lowerName.includes('jambon')) return 3;
-  if (lowerName.includes('salade') || lowerName.includes('tomate') || lowerName.includes('courgette') || lowerName.includes('avocat')) return 5;
-  if (lowerName.includes('lait') || lowerName.includes('yaourt') || lowerName.includes('crème') || lowerName.includes('fromage') || lowerName.includes('mozzarella')) return 10;
-  if (lowerName.includes('pain') || lowerName.includes('baguette')) return 4;
-  if (lowerName.includes('œuf') || lowerName.includes('oeuf')) return 14;
-
-  if (category === 'meat') return 3;
-  if (category === 'produce') return 5;
-  if (category === 'dairy') return 10;
-  return 30;
 }
 
 function jsonResponse(statusCode, body) {

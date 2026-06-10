@@ -1286,6 +1286,35 @@ class _ScanValidationSheetState extends State<_ScanValidationSheet> {
     });
   }
 
+  Future<void> _changeExpiryDate(DetectedProductDraft draft) async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: draft.estimatedExpirationDate,
+      firstDate: today,
+      lastDate: today.add(const Duration(days: 730)),
+      helpText: 'Modifier la date estimée',
+      cancelText: 'Annuler',
+      confirmText: 'Valider',
+    );
+
+    if (picked == null || !mounted) return;
+
+    setState(() {
+      _items = _items.map((item) {
+        if (item.id != draft.id) return item;
+        return item.copyWith(
+          estimatedExpirationDate: DateTime(
+            picked.year,
+            picked.month,
+            picked.day,
+          ),
+        );
+      }).toList();
+    });
+  }
+
   Future<void> _addProductManually() {
     return showModalBottomSheet<void>(
       context: context,
@@ -1397,9 +1426,9 @@ class _ScanValidationSheetState extends State<_ScanValidationSheet> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Tu peux modifier les quantités et unités, supprimer une '
-                    'ligne ou ajouter un produit oublié. Rien ne sera ajouté '
-                    'avant ta validation.',
+                    'Tu peux modifier les quantités, les unités et les dates '
+                    'estimées, supprimer une ligne ou ajouter un produit '
+                    'oublié. Rien ne sera ajouté avant ta validation.',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: colorScheme.onSurfaceVariant,
                       height: 1.35,
@@ -1454,6 +1483,7 @@ class _ScanValidationSheetState extends State<_ScanValidationSheet> {
                     onIncrement: () => _incrementQuantity(draft.id),
                     onDecrement: () => _decrementQuantity(draft.id),
                     onUnitChanged: (unit) => _changeUnit(draft.id, unit),
+                    onExpiryDateChanged: () => _changeExpiryDate(draft),
                     onRemove: () => _removeItem(draft.id),
                   );
                 },
@@ -1545,6 +1575,7 @@ class _DetectedProductTile extends StatelessWidget {
     required this.onIncrement,
     required this.onDecrement,
     required this.onUnitChanged,
+    required this.onExpiryDateChanged,
     required this.onRemove,
   });
 
@@ -1552,6 +1583,7 @@ class _DetectedProductTile extends StatelessWidget {
   final VoidCallback onIncrement;
   final VoidCallback onDecrement;
   final ValueChanged<String> onUnitChanged;
+  final VoidCallback onExpiryDateChanged;
   final VoidCallback onRemove;
 
   @override
@@ -1585,10 +1617,16 @@ class _DetectedProductTile extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 2),
-              Text(
-                expiryLabel,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
+              TextButton.icon(
+                onPressed: onExpiryDateChanged,
+                icon: const Icon(Icons.event_rounded, size: 16),
+                label: Text('Date estimée : $expiryLabel · Modifier'),
+                style: TextButton.styleFrom(
+                  foregroundColor: colorScheme.onSurfaceVariant,
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  textStyle: theme.textTheme.bodySmall,
                 ),
               ),
             ],
