@@ -4,6 +4,8 @@ import '../theme/app_theme.dart';
 
 enum ExpiryUrgency { expired, warning, safe }
 
+enum StorageLocation { fridge, freezer, pantry, spices }
+
 class FoodItem {
   const FoodItem({
     required this.id,
@@ -11,6 +13,7 @@ class FoodItem {
     required this.emoji,
     required this.expiryDate,
     this.category = FoodCategory.other,
+    this.storageLocation = StorageLocation.fridge,
     this.quantity = 1,
     this.amount = 1,
     this.unit = 'unité',
@@ -22,6 +25,7 @@ class FoodItem {
   final String emoji;
   final DateTime expiryDate;
   final FoodCategory category;
+  final StorageLocation storageLocation;
 
   /// Nombre d'unités logiques pour les stats et la consommation.
   /// Exemple : 4 yaourts => quantity = 4.
@@ -40,6 +44,7 @@ class FoodItem {
     String? emoji,
     DateTime? expiryDate,
     FoodCategory? category,
+    StorageLocation? storageLocation,
     int? quantity,
     double? amount,
     String? unit,
@@ -50,6 +55,7 @@ class FoodItem {
       emoji: emoji ?? this.emoji,
       expiryDate: expiryDate ?? this.expiryDate,
       category: category ?? this.category,
+      storageLocation: storageLocation ?? this.storageLocation,
       quantity: quantity ?? this.quantity,
       amount: amount ?? this.amount,
       unit: unit ?? this.unit,
@@ -63,6 +69,7 @@ class FoodItem {
       'emoji': emoji,
       'expiryDate': expiryDate.toIso8601String(),
       'category': category.name,
+      'storageLocation': storageLocation.name,
       'quantity': quantity,
       'amount': amount,
       'unit': unit,
@@ -90,6 +97,9 @@ class FoodItem {
       emoji: json['emoji'] as String,
       expiryDate: DateTime.parse(json['expiryDate'] as String),
       category: FoodCategory.values.byName(json['category'] as String),
+      storageLocation:
+          StorageLocation.values.asNameMap()[json['storageLocation']] ??
+          StorageLocation.fridge,
       quantity: quantity < 1 ? 1 : quantity,
       amount: amount <= 0 ? 1 : amount,
       unit: json['unit'] as String? ?? 'unité',

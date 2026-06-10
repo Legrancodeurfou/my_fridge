@@ -223,7 +223,8 @@ class FridgeStore extends ChangeNotifier {
   static bool _canMerge(FoodItem a, FoodItem b) {
     return _normalizeName(a.name) == _normalizeName(b.name) &&
         a.unit == b.unit &&
-        a.category == b.category;
+        a.category == b.category &&
+        a.storageLocation == b.storageLocation;
   }
 
   static String _normalizeName(String value) {
