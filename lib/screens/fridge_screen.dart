@@ -28,7 +28,9 @@ class FridgeScreen extends StatefulWidget {
 
 class _FridgeScreenState extends State<FridgeScreen> {
   final _searchController = TextEditingController();
+  final Set<String> _selectedFoodIds = {};
   String _searchQuery = '';
+  bool _isSelectionMode = false;
 
   @override
   void initState() {
@@ -59,7 +61,86 @@ class _FridgeScreenState extends State<FridgeScreen> {
     _showFoodFormSheet();
   }
 
+  void _startSelection([FoodItem? food]) {
+    setState(() {
+      _isSelectionMode = true;
+      if (food != null) _selectedFoodIds.add(food.id);
+    });
+  }
+
+  void _exitSelection() {
+    setState(() {
+      _isSelectionMode = false;
+      _selectedFoodIds.clear();
+    });
+  }
+
+  void _toggleFoodSelection(FoodItem food) {
+    setState(() {
+      _isSelectionMode = true;
+      if (!_selectedFoodIds.add(food.id)) {
+        _selectedFoodIds.remove(food.id);
+      }
+    });
+  }
+
+  void _toggleSelectAll(List<FoodItem> visibleFoods) {
+    final visibleIds = visibleFoods.map((food) => food.id).toSet();
+    final allVisibleSelected = visibleIds.every(_selectedFoodIds.contains);
+
+    setState(() {
+      if (allVisibleSelected) {
+        _selectedFoodIds.removeAll(visibleIds);
+      } else {
+        _selectedFoodIds.addAll(visibleIds);
+      }
+    });
+  }
+
+  void _deleteSelectedFoods() {
+    final allFoods = widget.store.foods;
+    final deletedFoodsByIndex = <int, FoodItem>{
+      for (var index = 0; index < allFoods.length; index++)
+        if (_selectedFoodIds.contains(allFoods[index].id))
+          index: allFoods[index],
+    };
+    if (deletedFoodsByIndex.isEmpty) return;
+
+    final deletedIds = deletedFoodsByIndex.values
+        .map((food) => food.id)
+        .toList();
+    final deletedCount = deletedIds.length;
+
+    setState(() {
+      _isSelectionMode = false;
+      _selectedFoodIds.clear();
+    });
+    widget.store.deleteFoodsByIds(deletedIds);
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          '$deletedCount aliment${deletedCount > 1 ? 's' : ''} '
+          'supprimé${deletedCount > 1 ? 's' : ''} du frigo',
+        ),
+        action: SnackBarAction(
+          label: 'Annuler',
+          onPressed: () {
+            widget.store.restoreFoodsAtIndices(deletedFoodsByIndex);
+          },
+        ),
+      ),
+    );
+  }
+
   void _onFoodTap(FoodItem food) {
+    if (_isSelectionMode) {
+      _toggleFoodSelection(food);
+      return;
+    }
+
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -211,17 +292,64 @@ class _FridgeScreenState extends State<FridgeScreen> {
     final stats = FridgeStats.fromItems(allFoods);
     final isFridgeEmpty = allFoods.isEmpty;
     final hasSearchResults = filteredFoods.isNotEmpty;
+    final selectedCount = _selectedFoodIds
+        .where((id) => allFoods.any((food) => food.id == id))
+        .length;
+    final visibleIds = filteredFoods.map((food) => food.id).toSet();
+    final allVisibleSelected =
+        visibleIds.isNotEmpty && visibleIds.every(_selectedFoodIds.contains);
 
     return Scaffold(
       backgroundColor: colorScheme.surfaceContainerLowest,
       appBar: AppBar(
-        title: const Text('Mon frigo'),
+        leading: _isSelectionMode
+            ? IconButton(
+                onPressed: _exitSelection,
+                icon: const Icon(Icons.close_rounded),
+                tooltip: 'Quitter la sélection',
+              )
+            : null,
+        title: Text(
+          _isSelectionMode
+              ? selectedCount == 0
+                    ? 'Sélectionner'
+                    : '$selectedCount sélectionné${selectedCount > 1 ? 's' : ''}'
+              : 'Mon frigo',
+        ),
         centerTitle: false,
         elevation: 0,
         scrolledUnderElevation: 0,
         backgroundColor: colorScheme.surfaceContainerLowest,
+        actions: [
+          if (_isSelectionMode) ...[
+            IconButton(
+              onPressed: filteredFoods.isEmpty
+                  ? null
+                  : () => _toggleSelectAll(filteredFoods),
+              icon: Icon(
+                allVisibleSelected
+                    ? Icons.deselect_rounded
+                    : Icons.select_all_rounded,
+              ),
+              tooltip: allVisibleSelected
+                  ? 'Tout désélectionner'
+                  : 'Tout sélectionner',
+            ),
+            IconButton(
+              onPressed: selectedCount == 0 ? null : _deleteSelectedFoods,
+              icon: const Icon(Icons.delete_outline_rounded),
+              color: colorScheme.error,
+              tooltip: 'Supprimer la sélection',
+            ),
+          ] else if (!isFridgeEmpty)
+            IconButton(
+              onPressed: _startSelection,
+              icon: const Icon(Icons.checklist_rounded),
+              tooltip: 'Sélectionner des aliments',
+            ),
+        ],
       ),
-      floatingActionButton: isFridgeEmpty
+      floatingActionButton: isFridgeEmpty || _isSelectionMode
           ? null
           : FloatingActionButton.extended(
               onPressed: _onAddFood,
@@ -273,7 +401,13 @@ class _FridgeScreenState extends State<FridgeScreen> {
                       itemBuilder: (context, index) {
                         return _FoodCard(
                           food: filteredFoods[index],
+                          isSelectionMode: _isSelectionMode,
+                          isSelected: _selectedFoodIds.contains(
+                            filteredFoods[index].id,
+                          ),
                           onTap: () => _onFoodTap(filteredFoods[index]),
+                          onLongPress: () =>
+                              _startSelection(filteredFoods[index]),
                         );
                       },
                     ),
@@ -455,10 +589,19 @@ class _VerticalDivider extends StatelessWidget {
 }
 
 class _FoodCard extends StatelessWidget {
-  const _FoodCard({required this.food, required this.onTap});
+  const _FoodCard({
+    required this.food,
+    required this.isSelectionMode,
+    required this.isSelected,
+    required this.onTap,
+    required this.onLongPress,
+  });
 
   final FoodItem food;
+  final bool isSelectionMode;
+  final bool isSelected;
   final VoidCallback onTap;
+  final VoidCallback onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -475,12 +618,19 @@ class _FoodCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(18),
       child: InkWell(
         onTap: onTap,
+        onLongPress: onLongPress,
         borderRadius: BorderRadius.circular(18),
         child: Ink(
           decoration: BoxDecoration(
+            color: isSelected
+                ? colorScheme.primaryContainer.withValues(alpha: 0.55)
+                : colorScheme.surface,
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
-              color: colorScheme.outlineVariant.withValues(alpha: 0.45),
+              color: isSelected
+                  ? colorScheme.primary
+                  : colorScheme.outlineVariant.withValues(alpha: 0.45),
+              width: isSelected ? 1.8 : 1,
             ),
             boxShadow: [
               BoxShadow(
@@ -577,10 +727,20 @@ class _FoodCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                Icon(
-                  Icons.chevron_right_rounded,
-                  color: colorScheme.onSurfaceVariant,
-                ),
+                if (isSelectionMode)
+                  Icon(
+                    isSelected
+                        ? Icons.check_circle_rounded
+                        : Icons.radio_button_unchecked_rounded,
+                    color: isSelected
+                        ? colorScheme.primary
+                        : colorScheme.onSurfaceVariant,
+                  )
+                else
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
               ],
             ),
           ),

@@ -80,6 +80,26 @@ class FridgeStore extends ChangeNotifier {
     _save();
   }
 
+  void restoreFoodsAtIndices(Map<int, FoodItem> foodsByIndex) {
+    if (foodsByIndex.isEmpty) return;
+
+    final restoredFoods = [..._foods];
+    final sortedEntries = foodsByIndex.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+
+    for (final entry in sortedEntries) {
+      if (restoredFoods.any((food) => food.id == entry.value.id)) continue;
+      restoredFoods.insert(
+        entry.key.clamp(0, restoredFoods.length),
+        entry.value,
+      );
+    }
+
+    _foods = restoredFoods;
+    notifyListeners();
+    _save();
+  }
+
   void deleteFoodsByIds(List<String> foodIds) {
     if (foodIds.isEmpty) return;
 
