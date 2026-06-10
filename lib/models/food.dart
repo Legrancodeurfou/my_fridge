@@ -6,6 +6,12 @@ enum ExpiryUrgency { expired, warning, safe }
 
 enum StorageLocation { fridge, freezer, pantry, spices }
 
+abstract final class StorageLocationHelper {
+  static StorageLocation fromName(String? value) {
+    return StorageLocation.values.asNameMap()[value] ?? StorageLocation.fridge;
+  }
+}
+
 class FoodItem {
   const FoodItem({
     required this.id,
@@ -97,9 +103,9 @@ class FoodItem {
       emoji: json['emoji'] as String,
       expiryDate: DateTime.parse(json['expiryDate'] as String),
       category: FoodCategory.values.byName(json['category'] as String),
-      storageLocation:
-          StorageLocation.values.asNameMap()[json['storageLocation']] ??
-          StorageLocation.fridge,
+      storageLocation: StorageLocationHelper.fromName(
+        json['storageLocation'] as String?,
+      ),
       quantity: quantity < 1 ? 1 : quantity,
       amount: amount <= 0 ? 1 : amount,
       unit: json['unit'] as String? ?? 'unité',

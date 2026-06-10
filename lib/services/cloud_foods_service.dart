@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/food.dart';
@@ -6,7 +7,7 @@ import 'supabase_service.dart';
 abstract final class CloudFoodsService {
   static Future<void> uploadFoods(List<FoodItem> foods) async {
     final user = _currentUser;
-    final rows = foods.map((food) => _toSupabaseRow(food, user.id)).toList();
+    final rows = foods.map((food) => toSupabaseRow(food, user.id)).toList();
 
     await SupabaseService.client.rpc(
       'replace_user_foods',
@@ -24,7 +25,7 @@ abstract final class CloudFoodsService {
         .order('expiration_date', ascending: true);
 
     return rows
-        .map<FoodItem>((row) => _fromSupabaseRow(Map<String, dynamic>.from(row)))
+        .map<FoodItem>((row) => fromSupabaseRow(Map<String, dynamic>.from(row)))
         .toList();
   }
 
@@ -41,12 +42,14 @@ abstract final class CloudFoodsService {
     return user;
   }
 
-  static Map<String, dynamic> _toSupabaseRow(FoodItem food, String userId) {
+  @visibleForTesting
+  static Map<String, dynamic> toSupabaseRow(FoodItem food, String userId) {
     return {
       'user_id': userId,
       'name': food.name,
       'emoji': food.emoji,
       'category': food.category.name,
+      'storage_location': food.storageLocation.name,
       'quantity': food.quantity,
       'amount': food.amount,
       'unit': food.unit,
@@ -54,7 +57,8 @@ abstract final class CloudFoodsService {
     };
   }
 
-  static FoodItem _fromSupabaseRow(Map<String, dynamic> row) {
+  @visibleForTesting
+  static FoodItem fromSupabaseRow(Map<String, dynamic> row) {
     final amount = _positiveDouble(row['amount'], fallback: 1);
 
     return FoodItem(
@@ -62,8 +66,17 @@ abstract final class CloudFoodsService {
       name: row['name'] as String,
       emoji: row['emoji'] as String? ?? '🍽️',
       category: _categoryFromName(row['category'] as String?),
+      storageLocation: StorageLocationHelper.fromName(
+        row['storage_location'] as String?,
+      ),
       expiryDate: DateTime.parse(row['expiration_date'] as String),
-      quantity: _positiveInt(row['quantity'], fallback: MeasurementHelper.logicalQuantity(amount, row['unit'] as String? ?? 'unité')),
+      quantity: _positiveInt(
+        row['quantity'],
+        fallback: MeasurementHelper.logicalQuantity(
+          amount,
+          row['unit'] as String? ?? 'unité',
+        ),
+      ),
       amount: amount,
       unit: row['unit'] as String? ?? 'unité',
     );

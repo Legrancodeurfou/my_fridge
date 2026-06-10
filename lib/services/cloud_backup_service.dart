@@ -33,9 +33,7 @@ abstract final class CloudBackupService {
 
     final foodsFuture = SupabaseService.client
         .from('foods')
-        .select(
-          'name, emoji, category, quantity, amount, unit, expiration_date',
-        )
+        .select()
         .eq('user_id', user.id);
     final shoppingItemsFuture = SupabaseService.client
         .from('shopping_items')
