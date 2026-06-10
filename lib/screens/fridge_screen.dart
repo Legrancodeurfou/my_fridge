@@ -71,7 +71,7 @@ class _FridgeScreenState extends State<FridgeScreen> {
             Navigator.pop(sheetContext);
             _showFoodFormSheet(foodToEdit: food);
           },
-          onDelete: () => _confirmDeleteFood(sheetContext, food),
+          onDelete: () => _deleteFoodWithUndo(sheetContext, food),
           onAddToShoppingList: () => _addFoodToShoppingList(sheetContext, food),
           onConsumeAmount: () {
             Navigator.pop(sheetContext);
@@ -81,7 +81,6 @@ class _FridgeScreenState extends State<FridgeScreen> {
       },
     );
   }
-
 
   void _addFoodToShoppingList(BuildContext sheetContext, FoodItem food) {
     widget.shoppingStore.addItem(
@@ -133,42 +132,26 @@ class _FridgeScreenState extends State<FridgeScreen> {
     );
   }
 
-  Future<void> _confirmDeleteFood(BuildContext sheetContext, FoodItem food) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Supprimer l’aliment ?'),
-          content: Text(
-            '« ${food.name} » sera retiré de ton frigo. Cette action est irréversible.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Annuler'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              style: FilledButton.styleFrom(
-                backgroundColor: Theme.of(dialogContext).colorScheme.error,
-              ),
-              child: const Text('Supprimer'),
-            ),
-          ],
-        );
-      },
+  void _deleteFoodWithUndo(BuildContext sheetContext, FoodItem food) {
+    final originalIndex = widget.store.foods.indexWhere(
+      (item) => item.id == food.id,
     );
-
-    if (confirmed != true || !mounted) return;
+    if (originalIndex == -1) return;
 
     widget.store.deleteFood(food.id);
     if (sheetContext.mounted) Navigator.pop(sheetContext);
 
-    ScaffoldMessenger.of(context).showSnackBar(
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
       SnackBar(
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         content: Text('${food.name} supprimé du frigo'),
+        action: SnackBarAction(
+          label: 'Annuler',
+          onPressed: () {
+            widget.store.restoreFood(food, index: originalIndex);
+          },
+        ),
       ),
     );
   }
@@ -329,7 +312,10 @@ class _SearchField extends StatelessWidget {
           builder: (context, value, _) {
             if (value.text.isEmpty) return const SizedBox.shrink();
             return IconButton(
-              icon: Icon(Icons.close_rounded, color: colorScheme.onSurfaceVariant),
+              icon: Icon(
+                Icons.close_rounded,
+                color: colorScheme.onSurfaceVariant,
+              ),
               onPressed: controller.clear,
               tooltip: 'Effacer',
             );
@@ -464,19 +450,12 @@ class _VerticalDivider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 1,
-      height: 48,
-      color: color.withValues(alpha: 0.6),
-    );
+    return Container(width: 1, height: 48, color: color.withValues(alpha: 0.6));
   }
 }
 
 class _FoodCard extends StatelessWidget {
-  const _FoodCard({
-    required this.food,
-    required this.onTap,
-  });
+  const _FoodCard({required this.food, required this.onTap});
 
   final FoodItem food;
   final VoidCallback onTap;
@@ -752,7 +731,10 @@ class _FoodDetailSheet extends StatelessWidget {
                       borderRadius: BorderRadius.circular(18),
                     ),
                     alignment: Alignment.center,
-                    child: Text(food.emoji, style: const TextStyle(fontSize: 32)),
+                    child: Text(
+                      food.emoji,
+                      style: const TextStyle(fontSize: 32),
+                    ),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
@@ -853,7 +835,9 @@ class _FoodDetailSheet extends StatelessWidget {
                 ),
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 14),
-                  side: BorderSide(color: colorScheme.error.withValues(alpha: 0.5)),
+                  side: BorderSide(
+                    color: colorScheme.error.withValues(alpha: 0.5),
+                  ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
                   ),
@@ -866,7 +850,6 @@ class _FoodDetailSheet extends StatelessWidget {
     );
   }
 }
-
 
 class _ConsumeAmountSheet extends StatefulWidget {
   const _ConsumeAmountSheet({required this.food});
@@ -952,7 +935,9 @@ class _ConsumeAmountSheetState extends State<_ConsumeAmountSheet> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                  color: colorScheme.surfaceContainerHighest.withValues(
+                    alpha: 0.35,
+                  ),
                   borderRadius: BorderRadius.circular(18),
                   border: Border.all(
                     color: colorScheme.outlineVariant.withValues(alpha: 0.45),
@@ -1084,10 +1069,7 @@ class _DetailRow extends StatelessWidget {
 }
 
 class _FoodFormSheet extends StatefulWidget {
-  const _FoodFormSheet({
-    required this.onSave,
-    this.foodToEdit,
-  });
+  const _FoodFormSheet({required this.onSave, this.foodToEdit});
 
   final void Function(FoodItem food) onSave;
   final FoodItem? foodToEdit;
@@ -1115,7 +1097,8 @@ class _FoodFormSheetState extends State<_FoodFormSheet> {
     _category = food?.category ?? FoodCategory.other;
     _amount = food?.amount ?? 1;
     _unit = food?.unit ?? 'unité';
-    _expiryDate = food?.expiryDate ??
+    _expiryDate =
+        food?.expiryDate ??
         DateTime(
           DateTime.now().year,
           DateTime.now().month,
@@ -1161,7 +1144,8 @@ class _FoodFormSheetState extends State<_FoodFormSheet> {
 
     final name = _nameController.text.trim();
     final food = FoodItem(
-      id: widget.foodToEdit?.id ??
+      id:
+          widget.foodToEdit?.id ??
           DateTime.now().millisecondsSinceEpoch.toString(),
       name: name,
       emoji: FoodCategoryHelper.emoji(_category),
@@ -1309,7 +1293,10 @@ class _FoodFormSheetState extends State<_FoodFormSheet> {
                             ),
                           ),
                           _FridgeQuantityStepper(
-                            amountLabel: MeasurementHelper.label(_amount, _unit),
+                            amountLabel: MeasurementHelper.label(
+                              _amount,
+                              _unit,
+                            ),
                             canDecrement:
                                 _amount > MeasurementHelper.stepFor(_unit),
                             onDecrement: _decrementAmount,
@@ -1387,10 +1374,7 @@ class _FoodFormSheetState extends State<_FoodFormSheet> {
                   ),
                   child: const Text(
                     'Enregistrer',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                    ),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
                   ),
                 ),
               ],

@@ -28,10 +28,14 @@ class ScanHistoryStore extends ChangeNotifier {
 
     try {
       final decoded = jsonDecode(savedJson) as List<dynamic>;
-      final items = decoded
-          .map((item) => ScanHistoryItem.fromJson(item as Map<String, dynamic>))
-          .toList()
-        ..sort((a, b) => b.scannedAt.compareTo(a.scannedAt));
+      final items =
+          decoded
+              .map(
+                (item) =>
+                    ScanHistoryItem.fromJson(item as Map<String, dynamic>),
+              )
+              .toList()
+            ..sort((a, b) => b.scannedAt.compareTo(a.scannedAt));
 
       return ScanHistoryStore._(items.take(_maxItems).toList());
     } catch (_) {
@@ -66,6 +70,16 @@ class ScanHistoryStore extends ChangeNotifier {
 
   void deleteScan(String id) {
     _items = _items.where((item) => item.id != id).toList();
+    notifyListeners();
+    _save();
+  }
+
+  void restoreScan(ScanHistoryItem item, {required int index}) {
+    if (_items.any((existingItem) => existingItem.id == item.id)) return;
+
+    final insertionIndex = index.clamp(0, _items.length);
+    _items = [..._items]..insert(insertionIndex, item);
+    _items = _items.take(_maxItems).toList();
     notifyListeners();
     _save();
   }

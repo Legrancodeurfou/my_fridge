@@ -68,18 +68,16 @@ class _ScanScreenState extends State<ScanScreen> {
                   const SizedBox(height: 20),
                   Text(
                     'Choisir une source',
-                    style: Theme.of(sheetContext).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
+                    style: Theme.of(sheetContext).textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 6),
                   Text(
                     'Utilise une photo nette où les lignes du ticket sont '
                     'faciles à lire.',
                     textAlign: TextAlign.center,
-                    style: Theme.of(sheetContext).textTheme.bodyMedium?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
+                    style: Theme.of(sheetContext).textTheme.bodyMedium
+                        ?.copyWith(color: colorScheme.onSurfaceVariant),
                   ),
                   const SizedBox(height: 16),
                   Material(
@@ -241,7 +239,9 @@ class _ScanScreenState extends State<ScanScreen> {
     setState(() => _isScanning = true);
 
     try {
-      final report = await _ticketAnalysis.analyzeTicketDetailed(_pickedImageBytes!);
+      final report = await _ticketAnalysis.analyzeTicketDetailed(
+        _pickedImageBytes!,
+      );
 
       if (!mounted) return;
 
@@ -279,10 +279,7 @@ class _ScanScreenState extends State<ScanScreen> {
       setState(() => _isScanning = false);
       debugPrint('Analyse du ticket impossible : $error');
 
-      _showScanSnackBar(
-        _scanErrorMessage(error),
-        isError: true,
-      );
+      _showScanSnackBar(_scanErrorMessage(error), isError: true);
     }
   }
 
@@ -342,10 +339,7 @@ class _ScanScreenState extends State<ScanScreen> {
                 : null,
           ),
           action: actionLabel != null && onAction != null
-              ? SnackBarAction(
-                  label: actionLabel,
-                  onPressed: onAction,
-                )
+              ? SnackBarAction(label: actionLabel, onPressed: onAction)
               : null,
         ),
       );
@@ -469,11 +463,7 @@ class _ScanScreenState extends State<ScanScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const SizedBox(height: 32),
-          Icon(
-            Icons.camera_alt_rounded,
-            size: 90,
-            color: colorScheme.primary,
-          ),
+          Icon(Icons.camera_alt_rounded, size: 90, color: colorScheme.primary),
           const SizedBox(height: 24),
           Text(
             'Scanne ton ticket de caisse',
@@ -643,7 +633,6 @@ class _ScanScreenState extends State<ScanScreen> {
 
 /// Carte d’aperçu du ticket (style aligné sur les cartes du frigo).
 
-
 class _AiDiagnosticSection extends StatelessWidget {
   const _AiDiagnosticSection({required this.historyStore});
 
@@ -654,7 +643,9 @@ class _AiDiagnosticSection extends StatelessWidget {
     return ListenableBuilder(
       listenable: historyStore,
       builder: (context, _) {
-        final latestScan = historyStore.items.isEmpty ? null : historyStore.items.first;
+        final latestScan = historyStore.items.isEmpty
+            ? null
+            : historyStore.items.first;
         if (latestScan == null) return const SizedBox.shrink();
 
         final theme = Theme.of(context);
@@ -685,10 +676,15 @@ class _AiDiagnosticSection extends StatelessWidget {
                     width: 38,
                     height: 38,
                     decoration: BoxDecoration(
-                      color: colorScheme.secondaryContainer.withValues(alpha: 0.55),
+                      color: colorScheme.secondaryContainer.withValues(
+                        alpha: 0.55,
+                      ),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Icon(Icons.info_outline_rounded, color: colorScheme.secondary),
+                    child: Icon(
+                      Icons.info_outline_rounded,
+                      color: colorScheme.secondary,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -706,9 +702,11 @@ class _AiDiagnosticSection extends StatelessWidget {
               _DiagnosticRow(label: 'Résultat', value: latestScan.statusLabel),
               _DiagnosticRow(
                 label: 'Produits',
-                value: '${latestScan.validatedCount}/${latestScan.detectedCount} validés',
+                value:
+                    '${latestScan.validatedCount}/${latestScan.detectedCount} validés',
               ),
-              if (latestScan.model != null && latestScan.model!.trim().isNotEmpty)
+              if (latestScan.model != null &&
+                  latestScan.model!.trim().isNotEmpty)
                 _DiagnosticRow(label: 'Service', value: latestScan.model!),
               if (latestScan.usedFallback)
                 Padding(
@@ -840,13 +838,36 @@ class _RecentScansSection extends StatelessWidget {
                   child: _ScanHistoryCard(
                     scan: scan,
                     onTap: () => _showScanDetails(context, scan),
-                    onDelete: () => historyStore.deleteScan(scan.id),
+                    onDelete: () => _deleteScanWithUndo(context, scan),
                   ),
                 ),
               ),
           ],
         );
       },
+    );
+  }
+
+  void _deleteScanWithUndo(BuildContext context, ScanHistoryItem scan) {
+    final originalIndex = historyStore.items.indexWhere(
+      (item) => item.id == scan.id,
+    );
+    if (originalIndex == -1) return;
+
+    historyStore.deleteScan(scan.id);
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
+      SnackBar(
+        content: const Text('Scan supprimé de l’historique'),
+        action: SnackBarAction(
+          label: 'Annuler',
+          onPressed: () {
+            historyStore.restoreScan(scan, index: originalIndex);
+          },
+        ),
+      ),
     );
   }
 
@@ -922,7 +943,10 @@ class _ScanHistoryCard extends StatelessWidget {
                   color: colorScheme.primaryContainer.withValues(alpha: 0.45),
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: Icon(Icons.receipt_long_rounded, color: colorScheme.primary),
+                child: Icon(
+                  Icons.receipt_long_rounded,
+                  color: colorScheme.primary,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -939,7 +963,9 @@ class _ScanHistoryCard extends StatelessWidget {
                     Text(
                       '${scan.sourceLabel} • ${scan.statusLabel}',
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: scan.usedFallback ? colorScheme.error : colorScheme.primary,
+                        color: scan.usedFallback
+                            ? colorScheme.error
+                            : colorScheme.primary,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -965,7 +991,10 @@ class _ScanHistoryCard extends StatelessWidget {
               ),
               IconButton(
                 onPressed: onDelete,
-                icon: Icon(Icons.delete_outline_rounded, color: colorScheme.error),
+                icon: Icon(
+                  Icons.delete_outline_rounded,
+                  color: colorScheme.error,
+                ),
                 tooltip: 'Supprimer',
               ),
             ],
@@ -1058,7 +1087,6 @@ class _ScanHistoryDetailSheet extends StatelessWidget {
   }
 }
 
-
 class _ScanDiagnosticBox extends StatelessWidget {
   const _ScanDiagnosticBox({required this.scan});
 
@@ -1106,7 +1134,8 @@ class _ScanDiagnosticBox extends StatelessWidget {
 
 String _formatScanDate(DateTime date) {
   final now = DateTime.now();
-  final isToday = date.year == now.year && date.month == now.month && date.day == now.day;
+  final isToday =
+      date.year == now.year && date.month == now.month && date.day == now.day;
   final day = isToday
       ? 'Aujourd’hui'
       : '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
@@ -1116,10 +1145,7 @@ String _formatScanDate(DateTime date) {
 }
 
 class _TicketPreviewCard extends StatelessWidget {
-  const _TicketPreviewCard({
-    required this.imageBytes,
-    required this.maxHeight,
-  });
+  const _TicketPreviewCard({required this.imageBytes, required this.maxHeight});
 
   final Uint8List imageBytes;
   final double maxHeight;
@@ -1169,16 +1195,16 @@ class _TicketPreviewCard extends StatelessWidget {
                     Text(
                       'Image non lisible',
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       'Choisis une autre photo avant de lancer l’analyse.',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                          ),
+                        color: colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   ],
                 ),
@@ -1335,8 +1361,9 @@ class _ScanValidationSheetState extends State<_ScanValidationSheet> {
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: colorScheme.primaryContainer
-                              .withValues(alpha: 0.5),
+                          color: colorScheme.primaryContainer.withValues(
+                            alpha: 0.5,
+                          ),
                           borderRadius: BorderRadius.circular(14),
                         ),
                         child: Icon(
@@ -1404,7 +1431,7 @@ class _ScanValidationSheetState extends State<_ScanValidationSheet> {
                     _items.isEmpty
                         ? 'Aucun produit sélectionné'
                         : '${_items.length} produit${_items.length > 1 ? 's' : ''} · '
-                            '$_totalLines ligne${_totalLines > 1 ? 's' : ''}',
+                              '$_totalLines ligne${_totalLines > 1 ? 's' : ''}',
                     style: theme.textTheme.labelLarge?.copyWith(
                       color: colorScheme.primary,
                       fontWeight: FontWeight.w600,
@@ -1434,7 +1461,10 @@ class _ScanValidationSheetState extends State<_ScanValidationSheet> {
             ),
             if (_items.isEmpty)
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 8,
+                ),
                 child: Text(
                   'Aucun produit sélectionné. Annule ou relance un scan.',
                   textAlign: TextAlign.center,
@@ -1528,8 +1558,7 @@ class _DetectedProductTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final expiryLabel =
-        ExpiryHelper.labelFor(draft.estimatedExpirationDate);
+    final expiryLabel = ExpiryHelper.labelFor(draft.estimatedExpirationDate);
 
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
@@ -1573,7 +1602,8 @@ class _DetectedProductTile extends StatelessWidget {
             children: [
               _QuantityStepper(
                 amountLabel: draft.amountLabel,
-                canDecrement: draft.amount > MeasurementHelper.stepFor(draft.unit),
+                canDecrement:
+                    draft.amount > MeasurementHelper.stepFor(draft.unit),
                 onDecrement: onDecrement,
                 onIncrement: onIncrement,
               ),
@@ -1643,10 +1673,7 @@ class _DetectedProductTile extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 12),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: controlsRow,
-                ),
+                Align(alignment: Alignment.centerRight, child: controlsRow),
               ],
             );
           }
@@ -1748,9 +1775,11 @@ class _ManualFoodFormSheetState extends State<_ManualFoodFormSheet> {
     super.initState();
     _nameController = TextEditingController();
     final now = DateTime.now();
-    _expiryDate = DateTime(now.year, now.month, now.day).add(
-      const Duration(days: 7),
-    );
+    _expiryDate = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).add(const Duration(days: 7));
   }
 
   @override
@@ -1779,7 +1808,9 @@ class _ManualFoodFormSheetState extends State<_ManualFoodFormSheet> {
     );
 
     if (picked == null || !mounted) return;
-    setState(() => _expiryDate = DateTime(picked.year, picked.month, picked.day));
+    setState(
+      () => _expiryDate = DateTime(picked.year, picked.month, picked.day),
+    );
   }
 
   void _save() {
@@ -1839,10 +1870,15 @@ class _ManualFoodFormSheetState extends State<_ManualFoodFormSheet> {
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: colorScheme.primaryContainer.withValues(alpha: 0.5),
+                        color: colorScheme.primaryContainer.withValues(
+                          alpha: 0.5,
+                        ),
                         borderRadius: BorderRadius.circular(14),
                       ),
-                      child: Icon(Icons.edit_rounded, color: colorScheme.primary),
+                      child: Icon(
+                        Icons.edit_rounded,
+                        color: colorScheme.primary,
+                      ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -1909,7 +1945,8 @@ class _ManualFoodFormSheetState extends State<_ManualFoodFormSheet> {
                     Expanded(
                       child: _ManualAmountStepper(
                         amountLabel: MeasurementHelper.label(_amount, _unit),
-                        canDecrement: _amount > MeasurementHelper.stepFor(_unit),
+                        canDecrement:
+                            _amount > MeasurementHelper.stepFor(_unit),
                         onDecrement: _decrementAmount,
                         onIncrement: _incrementAmount,
                       ),
@@ -1945,10 +1982,15 @@ class _ManualFoodFormSheetState extends State<_ManualFoodFormSheet> {
                 OutlinedButton.icon(
                   onPressed: _pickExpiryDate,
                   icon: const Icon(Icons.event_rounded),
-                  label: Text('DLC estimée : ${ExpiryHelper.labelFor(_expiryDate)}'),
+                  label: Text(
+                    'DLC estimée : ${ExpiryHelper.labelFor(_expiryDate)}',
+                  ),
                   style: OutlinedButton.styleFrom(
                     alignment: Alignment.centerLeft,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
                     ),

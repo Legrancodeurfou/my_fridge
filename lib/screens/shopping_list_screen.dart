@@ -31,7 +31,9 @@ class ShoppingListScreen extends StatelessWidget {
             centerTitle: false,
             elevation: 0,
             scrolledUnderElevation: 0,
-            backgroundColor: Theme.of(context).colorScheme.surfaceContainerLowest,
+            backgroundColor: Theme.of(
+              context,
+            ).colorScheme.surfaceContainerLowest,
             actions: [
               if (items.isNotEmpty)
                 PopupMenuButton<_ShoppingAction>(
@@ -77,11 +79,12 @@ class ShoppingListScreen extends StatelessWidget {
                         onAddCheckedToFridge: checkedCount == 0
                             ? null
                             : () => _showAddCheckedToFridgeSheet(
-                                  context,
-                                  checkedItems,
-                                ),
-                        onClearChecked:
-                            checkedCount == 0 ? null : shoppingStore.clearChecked,
+                                context,
+                                checkedItems,
+                              ),
+                        onClearChecked: checkedCount == 0
+                            ? null
+                            : shoppingStore.clearChecked,
                         onClearAll: () => _confirmClearAll(context),
                       );
                     }
@@ -90,12 +93,35 @@ class ShoppingListScreen extends StatelessWidget {
                     return _ShoppingItemCard(
                       item: item,
                       onToggle: () => shoppingStore.toggleItem(item.id),
-                      onDelete: () => shoppingStore.deleteItem(item.id),
+                      onDelete: () =>
+                          _deleteItemWithUndo(context, item, index - 1),
                     );
                   },
                 ),
         );
       },
+    );
+  }
+
+  void _deleteItemWithUndo(
+    BuildContext context,
+    ShoppingItem item,
+    int originalIndex,
+  ) {
+    shoppingStore.deleteItem(item.id);
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('${item.name} supprimé des courses'),
+        action: SnackBarAction(
+          label: 'Annuler',
+          onPressed: () {
+            shoppingStore.restoreItem(item, index: originalIndex);
+          },
+        ),
+      ),
     );
   }
 
@@ -122,7 +148,9 @@ class ShoppingListScreen extends StatelessWidget {
     ];
 
     fridgeStore.addFoods(foods);
-    shoppingStore.deleteItemsByIds(drafts.map((draft) => draft.item.id).toList());
+    shoppingStore.deleteItemsByIds(
+      drafts.map((draft) => draft.item.id).toList(),
+    );
 
     if (!context.mounted) return;
 
@@ -181,10 +209,7 @@ class _PurchasedDraft {
   final FoodCategory category;
   final DateTime expiryDate;
 
-  _PurchasedDraft copyWith({
-    FoodCategory? category,
-    DateTime? expiryDate,
-  }) {
+  _PurchasedDraft copyWith({FoodCategory? category, DateTime? expiryDate}) {
     return _PurchasedDraft(
       item: item,
       category: category ?? this.category,
@@ -222,7 +247,8 @@ class _AddCheckedToFridgeSheet extends StatefulWidget {
   final List<ShoppingItem> items;
 
   @override
-  State<_AddCheckedToFridgeSheet> createState() => _AddCheckedToFridgeSheetState();
+  State<_AddCheckedToFridgeSheet> createState() =>
+      _AddCheckedToFridgeSheetState();
 }
 
 class _AddCheckedToFridgeSheetState extends State<_AddCheckedToFridgeSheet> {
@@ -233,8 +259,11 @@ class _AddCheckedToFridgeSheetState extends State<_AddCheckedToFridgeSheet> {
     super.initState();
 
     final today = DateTime.now();
-    final defaultExpiryDate = DateTime(today.year, today.month, today.day)
-        .add(const Duration(days: 7));
+    final defaultExpiryDate = DateTime(
+      today.year,
+      today.month,
+      today.day,
+    ).add(const Duration(days: 7));
 
     _drafts = [
       for (final item in widget.items)
@@ -385,7 +414,9 @@ class _AddCheckedToFridgeSheetState extends State<_AddCheckedToFridgeSheet> {
                           draft: draft,
                           formattedDate: _formatDate(draft.expiryDate),
                           onCategoryChanged: (category) {
-                            if (category != null) _updateCategory(index, category);
+                            if (category != null) {
+                              _updateCategory(index, category);
+                            }
                           },
                           onPickDate: () => _pickExpiryDate(index),
                         ),
@@ -560,19 +591,25 @@ class _ShoppingListHeader extends StatelessWidget {
       decoration: BoxDecoration(
         color: colorScheme.surface,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.45)),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.45),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             '$totalCount ingrédient${totalCount > 1 ? 's' : ''} à acheter',
-            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
           ),
           const SizedBox(height: 6),
           Text(
             '$checkedCount déjà coché${checkedCount > 1 ? 's' : ''}',
-            style: theme.textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
           ),
           const SizedBox(height: 14),
           FilledButton.icon(
@@ -638,7 +675,9 @@ class _ShoppingItemCard extends StatelessWidget {
         child: Ink(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.45)),
+            border: Border.all(
+              color: colorScheme.outlineVariant.withValues(alpha: 0.45),
+            ),
             boxShadow: [
               BoxShadow(
                 color: colorScheme.shadow.withValues(alpha: 0.04),
@@ -651,10 +690,7 @@ class _ShoppingItemCard extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             child: Row(
               children: [
-                Checkbox(
-                  value: item.isChecked,
-                  onChanged: (_) => onToggle(),
-                ),
+                Checkbox(value: item.isChecked, onChanged: (_) => onToggle()),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Column(
@@ -682,7 +718,10 @@ class _ShoppingItemCard extends StatelessWidget {
                 ),
                 IconButton(
                   onPressed: onDelete,
-                  icon: Icon(Icons.delete_outline_rounded, color: colorScheme.error),
+                  icon: Icon(
+                    Icons.delete_outline_rounded,
+                    color: colorScheme.error,
+                  ),
                   tooltip: 'Supprimer',
                 ),
               ],

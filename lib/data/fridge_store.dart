@@ -71,6 +71,15 @@ class FridgeStore extends ChangeNotifier {
     _save();
   }
 
+  void restoreFood(FoodItem food, {required int index}) {
+    if (_foods.any((item) => item.id == food.id)) return;
+
+    final insertionIndex = index.clamp(0, _foods.length);
+    _foods = [..._foods]..insert(insertionIndex, food);
+    notifyListeners();
+    _save();
+  }
+
   void deleteFoodsByIds(List<String> foodIds) {
     if (foodIds.isEmpty) return;
 
@@ -162,9 +171,7 @@ class FridgeStore extends ChangeNotifier {
     List<FoodItem> currentFoods,
     FoodItem newFood,
   ) {
-    final index = currentFoods.indexWhere(
-      (food) => _canMerge(food, newFood),
-    );
+    final index = currentFoods.indexWhere((food) => _canMerge(food, newFood));
 
     if (index == -1) {
       return [newFood, ...currentFoods];

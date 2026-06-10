@@ -128,6 +128,15 @@ class ShoppingListStore extends ChangeNotifier {
     _save();
   }
 
+  void restoreItem(ShoppingItem item, {required int index}) {
+    if (_items.any((existingItem) => existingItem.id == item.id)) return;
+
+    final insertionIndex = index.clamp(0, _items.length);
+    _items = [..._items]..insert(insertionIndex, item);
+    notifyListeners();
+    _save();
+  }
+
   void deleteItemsByIds(List<String> ids) {
     if (ids.isEmpty) return;
 
