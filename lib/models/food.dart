@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_theme.dart';
+
 enum ExpiryUrgency { expired, warning, safe }
 
 class FoodItem {
@@ -358,9 +360,9 @@ abstract final class ExpiryHelper {
 
   static Color colorFor(ExpiryUrgency urgency) {
     return switch (urgency) {
-      ExpiryUrgency.expired => const Color(0xFFE53935),
-      ExpiryUrgency.warning => const Color(0xFFFB8C00),
-      ExpiryUrgency.safe => const Color(0xFF43A047),
+      ExpiryUrgency.expired => AppColors.expired,
+      ExpiryUrgency.warning => AppColors.expiringSoon,
+      ExpiryUrgency.safe => AppColors.primary,
     };
   }
 

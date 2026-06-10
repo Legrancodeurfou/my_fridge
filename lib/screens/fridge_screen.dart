@@ -6,6 +6,7 @@ import '../data/fridge_store.dart';
 import '../data/shopping_list_store.dart';
 import '../models/food.dart';
 import '../models/shopping_item.dart';
+import '../theme/app_theme.dart';
 
 // ---------------------------------------------------------------------------
 // Écran principal
@@ -395,7 +396,7 @@ class _StatsCard extends StatelessWidget {
               icon: Icons.schedule_rounded,
               value: stats.expiringSoon.toString(),
               label: 'Bientôt',
-              color: const Color(0xFFFB8C00),
+              color: AppColors.expiringSoon,
             ),
           ),
           _VerticalDivider(color: colorScheme.outlineVariant),
@@ -404,7 +405,7 @@ class _StatsCard extends StatelessWidget {
               icon: Icons.error_outline_rounded,
               value: stats.expired.toString(),
               label: 'Expirés',
-              color: const Color(0xFFE53935),
+              color: AppColors.expired,
             ),
           ),
         ],

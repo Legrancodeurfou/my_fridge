@@ -61,6 +61,13 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  fonts:
+    - family: PlusJakartaSans
+      fonts:
+        - asset: assets/fonts/PlusJakartaSans-VariableFont_wght.ttf
+        - asset: assets/fonts/PlusJakartaSans-Italic-VariableFont_wght.ttf
+          style: italic
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

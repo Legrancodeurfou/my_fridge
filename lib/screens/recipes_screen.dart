@@ -7,6 +7,7 @@ import '../data/recipe_notes_store.dart';
 import '../data/shopping_list_store.dart';
 import '../models/food.dart';
 import '../models/shopping_item.dart';
+import '../theme/app_theme.dart';
 
 class RecipesScreen extends StatelessWidget {
   const RecipesScreen({
@@ -173,7 +174,7 @@ class _RecipesContent extends StatelessWidget {
                       helpText:
                           'Tu as les quantités nécessaires dans ton frigo.',
                       icon: Icons.check_circle_rounded,
-                      color: const Color(0xFF2E7D32),
+                      color: AppColors.primary,
                       recipes: feasibleRecipes,
                       store: store,
                       shoppingListStore: shoppingListStore,
@@ -187,7 +188,7 @@ class _RecipesContent extends StatelessWidget {
                       helpText:
                           'Il ne manque qu’un ingrédient pour ces recettes.',
                       icon: Icons.auto_awesome_rounded,
-                      color: const Color(0xFFEF6C00),
+                      color: AppColors.expiringSoon,
                       recipes: almostFeasibleRecipes,
                       store: store,
                       shoppingListStore: shoppingListStore,
@@ -1297,7 +1298,7 @@ class _RecipeCard extends StatelessWidget {
             ? 'Presque faisable'
             : '${missing.length} ingrédients manquants';
     final availabilityColor =
-        missing.isEmpty ? const Color(0xFF2E7D32) : const Color(0xFFEF6C00);
+        missing.isEmpty ? AppColors.primary : AppColors.expiringSoon;
 
     return Material(
       color: colorScheme.surface,
@@ -1384,7 +1385,7 @@ class _RecipeCard extends StatelessWidget {
                                 ? Icons.favorite_rounded
                                 : Icons.favorite_border_rounded,
                             color: isFavorite
-                                ? const Color(0xFFE53935)
+                                ? AppColors.primary
                                 : colorScheme.onSurfaceVariant,
                           ),
                           onPressed: () => favoriteRecipesStore.toggleFavorite(recipe.name),
@@ -1409,13 +1410,13 @@ class _RecipeCard extends StatelessWidget {
                       const _RecipeBadge(
                         label: 'Bientôt périmé',
                         icon: Icons.schedule_rounded,
-                        color: Color(0xFFEF6C00),
+                        color: AppColors.expiringSoon,
                       ),
                     if (isFavorite)
                       const _RecipeBadge(
                         label: 'Favori',
                         icon: Icons.favorite_rounded,
-                        color: Color(0xFFE53935),
+                        color: AppColors.primary,
                       ),
                     if (hasNote)
                       _RecipeBadge(
@@ -1451,7 +1452,7 @@ class _RecipeCard extends StatelessWidget {
                     width: double.infinity,
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFEF6C00).withValues(alpha: 0.09),
+                      color: AppColors.expiringSoon.withValues(alpha: 0.09),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
@@ -1459,7 +1460,7 @@ class _RecipeCard extends StatelessWidget {
                       '${_joinedIngredientNames(expiringSoon)} '
                       '${expiringSoon.length > 1 ? 'sont à utiliser bientôt' : 'est à utiliser bientôt'}.',
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: const Color(0xFFB45309),
+                        color: AppColors.textPrimary,
                         fontWeight: FontWeight.w700,
                         height: 1.35,
                       ),
@@ -1527,9 +1528,9 @@ class _IngredientChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final color = switch (status) {
-      _IngredientStatus.available => const Color(0xFF2E7D32),
-      _IngredientStatus.missing => const Color(0xFFC62828),
-      _IngredientStatus.expiringSoon => const Color(0xFFEF6C00),
+      _IngredientStatus.available => AppColors.primary,
+      _IngredientStatus.missing => AppColors.expired,
+      _IngredientStatus.expiringSoon => AppColors.expiringSoon,
     };
     final icon = switch (status) {
       _IngredientStatus.available => Icons.check_circle_outline_rounded,
@@ -1829,7 +1830,7 @@ class _RecipeDetailSheet extends StatelessWidget {
                                 ? Icons.favorite_rounded
                                 : Icons.favorite_border_rounded,
                             color: isFavorite
-                                ? const Color(0xFFE53935)
+                                ? AppColors.primary
                                 : colorScheme.onSurfaceVariant,
                           ),
                           onPressed: () => favoriteRecipesStore.toggleFavorite(recipe.name),
@@ -1859,20 +1860,20 @@ class _RecipeDetailSheet extends StatelessWidget {
                               ? Icons.check_circle_outline_rounded
                               : Icons.shopping_basket_outlined,
                           color: missing.isEmpty
-                              ? const Color(0xFF2E7D32)
-                              : const Color(0xFFEF6C00),
+                              ? AppColors.primary
+                              : AppColors.expiringSoon,
                         ),
                         if (expiringSoon.isNotEmpty)
                           const _RecipeBadge(
                             label: 'Anti-gaspillage',
                             icon: Icons.eco_outlined,
-                            color: Color(0xFFEF6C00),
+                            color: AppColors.expiringSoon,
                           ),
                         if (isFavorite)
                           const _RecipeBadge(
                             label: 'Favori',
                             icon: Icons.favorite_rounded,
-                            color: Color(0xFFE53935),
+                            color: AppColors.primary,
                           ),
                         if (hasNote)
                           _RecipeBadge(
@@ -1913,10 +1914,10 @@ class _RecipeDetailSheet extends StatelessWidget {
                         padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
                           color:
-                              const Color(0xFFEF6C00).withValues(alpha: 0.09),
+                              AppColors.expiringSoon.withValues(alpha: 0.09),
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(
-                            color: const Color(0xFFEF6C00)
+                            color: AppColors.expiringSoon
                                 .withValues(alpha: 0.25),
                           ),
                         ),
@@ -1925,7 +1926,7 @@ class _RecipeDetailSheet extends StatelessWidget {
                           children: [
                             const Icon(
                               Icons.eco_outlined,
-                              color: Color(0xFFEF6C00),
+                              color: AppColors.expiringSoon,
                               size: 20,
                             ),
                             const SizedBox(width: 10),
@@ -1935,7 +1936,7 @@ class _RecipeDetailSheet extends StatelessWidget {
                                 '${_joinedIngredientNames(expiringSoon)} '
                                 '${expiringSoon.length > 1 ? 'sont bientôt périmés' : 'est bientôt périmé'}.',
                                 style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: const Color(0xFFB45309),
+                                  color: AppColors.textPrimary,
                                   fontWeight: FontWeight.w700,
                                   height: 1.4,
                                 ),

@@ -6,6 +6,7 @@ import '../data/scan_history_store.dart';
 import '../data/shopping_list_store.dart';
 import '../models/food.dart';
 import '../models/scan_history_item.dart';
+import '../theme/app_theme.dart';
 import 'recipes_screen.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -162,7 +163,7 @@ class _HomeContent extends StatelessWidget {
             icon: Icons.document_scanner_outlined,
             title: 'Scanner un ticket',
             subtitle: 'Ajoute plusieurs produits en un clic',
-            color: const Color(0xFF00897B),
+            color: AppColors.primary,
             onTap: () => onNavigateToTab(HomeScreen.scanTabIndex),
           ),
           const SizedBox(height: 12),
@@ -176,7 +177,7 @@ class _HomeContent extends StatelessWidget {
                 : suggestedRecipes.isEmpty
                     ? 'Ajoute des aliments non expirés pour obtenir des idées'
                     : 'Découvre les idées à compléter avec quelques ingrédients',
-            color: const Color(0xFF43A047),
+            color: AppColors.primary,
             onTap: () => onNavigateToTab(HomeScreen.recipesTabIndex),
           ),
           if (expiringSoonFoods.isNotEmpty) ...[
@@ -227,7 +228,7 @@ class _HomeContent extends StatelessWidget {
           subtitle: expiringSoonFoods.isEmpty
               ? 'Va voir ce qui approche de la date limite.'
               : 'Priorité : ${expiringSoonFoods.first.name}.',
-          color: const Color(0xFFFB8C00),
+          color: AppColors.expiringSoon,
           onTap: () => onNavigateToTab(HomeScreen.fridgeTabIndex),
         ),
       );
@@ -241,7 +242,7 @@ class _HomeContent extends StatelessWidget {
               '${feasibleRecipeCount > 1 ? 's' : ''} faisable'
               '${feasibleRecipeCount > 1 ? 's' : ''} maintenant',
           subtitle: 'Tous les ingrédients nécessaires sont disponibles.',
-          color: const Color(0xFF43A047),
+          color: AppColors.primary,
           onTap: () => onNavigateToTab(HomeScreen.recipesTabIndex),
         ),
       );
@@ -252,7 +253,7 @@ class _HomeContent extends StatelessWidget {
           title: 'Des idées recettes à compléter',
           subtitle:
               'Aucune recette n’est entièrement faisable pour l’instant.',
-          color: const Color(0xFFEF6C00),
+          color: AppColors.expiringSoon,
           onTap: () => onNavigateToTab(HomeScreen.recipesTabIndex),
         ),
       );
@@ -278,7 +279,7 @@ class _HomeContent extends StatelessWidget {
           icon: Icons.receipt_long_rounded,
           title: 'Dernier scan ${_relativeScanLabel(latestScan!.scannedAt)}',
           subtitle: latestScan!.summary,
-          color: const Color(0xFF6D4C41),
+          color: AppColors.textSecondary,
           onTap: () => onNavigateToTab(HomeScreen.scanTabIndex),
         ),
       );
@@ -290,7 +291,7 @@ class _HomeContent extends StatelessWidget {
           icon: Icons.document_scanner_outlined,
           title: 'Commence par scanner un ticket',
           subtitle: 'Ajoute rapidement les produits de tes dernières courses.',
-          color: const Color(0xFF00897B),
+          color: AppColors.primary,
           onTap: () => onNavigateToTab(HomeScreen.scanTabIndex),
         ),
       );
@@ -416,7 +417,7 @@ class _SummaryStatsCard extends StatelessWidget {
               icon: Icons.schedule_rounded,
               value: expiringSoon.toString(),
               label: 'Bientôt',
-              color: const Color(0xFFFB8C00),
+              color: AppColors.expiringSoon,
             ),
           ),
           _HomeDivider(color: colorScheme.outlineVariant),
@@ -425,7 +426,7 @@ class _SummaryStatsCard extends StatelessWidget {
               icon: Icons.restaurant_menu_outlined,
               value: recipeCount.toString(),
               label: 'Faisables',
-              color: const Color(0xFF43A047),
+              color: AppColors.primary,
             ),
           ),
           _HomeDivider(color: colorScheme.outlineVariant),
@@ -434,7 +435,7 @@ class _SummaryStatsCard extends StatelessWidget {
               icon: Icons.shopping_cart_outlined,
               value: shoppingCount.toString(),
               label: 'Courses',
-              color: const Color(0xFF7E57C2),
+              color: AppColors.primary,
             ),
           ),
         ],

@@ -21,6 +21,7 @@ import 'services/cloud_recipe_notes_service.dart';
 import 'services/cloud_scan_history_service.dart';
 import 'services/cloud_shopping_list_service.dart';
 import 'services/supabase_service.dart';
+import 'theme/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -38,10 +39,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'My Fridge',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF6F4DBF)),
-      ),
+      theme: AppTheme.light,
       home: FutureBuilder<_AppStores>(
         future: _AppStores.load(),
         builder: (context, snapshot) {
