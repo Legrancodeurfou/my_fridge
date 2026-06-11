@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 
 const {
   normalizeShelfLifeDays,
-} = require('./shelf-life-estimator');
+} = require('../netlify/functions/shelf-life-estimator');
 
 test('uses realistic durations for common scanned products', () => {
   assert.equal(normalizeShelfLifeDays(3, 'meat', 'Jambon sous vide'), 14);

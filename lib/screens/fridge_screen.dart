@@ -145,7 +145,7 @@ class _FridgeScreenState extends State<FridgeScreen> {
       SnackBar(
         content: Text(
           '$deletedCount aliment${deletedCount > 1 ? 's' : ''} '
-          'supprimé${deletedCount > 1 ? 's' : ''} du frigo',
+          'supprimé${deletedCount > 1 ? 's' : ''} du stock',
         ),
         action: SnackBarAction(
           label: 'Annuler',
