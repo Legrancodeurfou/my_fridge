@@ -34,8 +34,21 @@ Format exact attendu :
   }
 ]
 
-Unités autorisées uniquement : "g", "kg", "ml", "cl", "l", "unité", "tranche".
-Catégories autorisées uniquement : "dairy", "produce", "meat", "other".
+Unités autorisées uniquement : "g", "kg", "ml", "cl", "l", "unité", "tranche", "paquet", "pot".
+Catégories autorisées uniquement :
+- "produce" : fruits et légumes
+- "meat" : viande et charcuterie
+- "seafood" : poisson et fruits de mer
+- "dairy" : produits laitiers et œufs
+- "starches" : féculents et céréales
+- "savoryGrocery" : épicerie salée
+- "sweetGrocery" : épicerie sucrée
+- "beverages" : boissons
+- "frozen" : surgelés
+- "spicesCondiments" : épices et condiments
+- "bakery" : boulangerie et viennoiseries
+- "preparedMeals" : plats préparés
+- "other" : autre ou incertain
 Emplacements autorisés uniquement : "fridge", "pantry", "freezer", "spices".
 
 Règles très importantes :
@@ -43,11 +56,20 @@ Règles très importantes :
 - N'utilise jamais un chiffre provenant d'une colonne secondaire du ticket comme quantité : TVA, taux de taxe, prix unitaire, prix total de ligne, remise, pourcentage, code rayon ou référence.
 - La proximité visuelle avec une ligne produit ne suffit pas : un chiffre isolé sans unité ou multiplicateur clairement associé au produit n'est pas un grammage ni un nombre d'unités.
 - N'invente jamais un poids, un volume ou un nombre de tranches si l'information n'est pas clairement visible et rattachée au produit.
-- Si le poids, le volume ou le nombre précis n'est pas visible, retourne simplement : quantity = 1, amount = 1, unit = "unité".
-- En cas de doute sur l'unité ou sur l'origine d'un chiffre, préfère toujours quantity = 1, amount = 1, unit = "unité".
+- Si le poids, le volume ou le nombre précis n'est pas visible, utilise une unité naturelle uniquement pour les cas évidents ci-dessous. Sinon retourne quantity = 1, amount = 1, unit = "unité".
+- En cas de doute sur l'unité ou sur l'origine d'un chiffre, préfère quantity = 1, amount = 1, unit = "unité".
 - Pour les produits comme pâtes, riz, biscuits, chocolat, conserve, sauce, pain, fromage emballé : si le poids n'est pas visible, mets 1 unité. Ne mets pas 500 g par défaut.
 - Pour les produits naturellement comptables, garde le nombre uniquement s'il est visible ou clairement indiqué : œufs, yaourts, fruits, légumes, tranches de jambon, tranches de pain.
 - Ne convertis jamais un prix décimal, un taux de TVA ou un pourcentage en quantité, même si aucune autre quantité n'est visible.
+
+Règles d'unité naturelle :
+- jambon, bacon et pain de mie : "tranche" si aucun poids explicite n'est visible ;
+- œufs, fruits et légumes individuels : "unité" si aucun poids explicite n'est visible ;
+- lait, jus et soupe liquide : "l", "cl" ou "ml" seulement si le volume est visible ; sinon "l" avec amount = 1 pour un contenant clairement identifié ;
+- farine, sucre, pâtes, riz, fromage, viande et poisson : "g" ou "kg" seulement si le poids est visible ;
+- chips, biscuits et céréales : "g" si le poids est visible, sinon "paquet" ;
+- épices et herbes : "g" si le poids est visible, sinon "pot" ;
+- une unité explicite et valide visible sur le ticket est toujours prioritaire et ne doit jamais être remplacée.
 
 Exemples négatifs obligatoires :
 - Une colonne "TVA 5.5", "TVA 10" ou "TVA 20" ne doit jamais produire 5.5 g, 10 unités, 20 unités ou toute autre quantité.
@@ -73,7 +95,7 @@ Règles d'emplacement conseillé :
 
 Exemples positifs :
 - Exemple : "Jambon 6 tranches" visible => quantity = 6, amount = 6, unit = "tranche".
-- Exemple : "Jambon" sans nombre visible => quantity = 1, amount = 1, unit = "unité".
+- Exemple : "Jambon" sans nombre visible => quantity = 1, amount = 1, unit = "tranche".
 - Exemple : "Riz" sans poids visible => quantity = 1, amount = 1, unit = "unité".
 - Exemple : "Pâtes" sans poids visible => quantity = 1, amount = 1, unit = "unité".
 - Exemple : "Lait 1L" visible => quantity = 1, amount = 1, unit = "l".
@@ -269,29 +291,52 @@ function normalizeProduct(raw, today) {
   const rawAmount = Number(raw.amount);
   const rawQuantity = Number(raw.quantity);
 
+  const suggestedUnit = suggestUnit(name, hasUsableAmount);
   let unit = unitInfo.unit;
   let amount;
   let quantity;
 
   // Si Gemini n'a pas fourni d'unité reconnue ou n'a pas fourni de quantité
   // affichable claire, on évite d'inventer un poids/volume.
-  if (!unitInfo.isRecognized || !hasUsableAmount) {
-    unit = 'unité';
-    amount = hasUsableQuantity ? Math.max(1, Math.round(rawQuantity)) : 1;
-    quantity = Math.max(1, Math.round(amount));
+  if (!unitInfo.isRecognized) {
+    unit = suggestedUnit;
+    const usesMeasuredUnit = ['g', 'kg', 'ml', 'cl', 'l'].includes(unit);
+    const usesCountableUnit = ['unité', 'tranche', 'paquet', 'pot'].includes(
+      unit,
+    );
+    const hasSafeCountableAmount =
+      usesCountableUnit &&
+      Number.isInteger(rawAmount) &&
+      rawAmount >= 1 &&
+      rawAmount <= 99;
+
+    amount =
+      (usesMeasuredUnit && hasUsableAmount) || hasSafeCountableAmount
+        ? rawAmount
+        : hasUsableQuantity
+          ? Math.max(1, Math.round(rawQuantity))
+          : 1;
+    quantity = normalizeQuantity(raw.quantity, amount, unit);
   } else {
-    amount = rawAmount;
+    amount = hasUsableAmount
+      ? rawAmount
+      : hasUsableQuantity
+        ? Math.max(1, Math.round(rawQuantity))
+        : 1;
     quantity = normalizeQuantity(raw.quantity, amount, unit);
   }
 
   // Dernier garde-fou : pas de valeurs absurdes en unités ou tranches.
-  if ((unit === 'unité' || unit === 'tranche') && amount > 99) {
+  if (
+    ['unité', 'tranche', 'paquet', 'pot'].includes(unit) &&
+    amount > 99
+  ) {
     amount = 1;
     quantity = 1;
     unit = 'unité';
   }
 
-  const category = normalizeCategory(raw.category);
+  const category = normalizeCategory(raw.category, name);
   const storageLocation = normalizeStorageLocation(raw.storageLocation, name);
   const shelfLifeDays = normalizeShelfLifeDays(
     raw.estimatedShelfLifeDays,
@@ -342,7 +387,7 @@ function normalizeQuantity(value, amount, unit) {
     return Math.round(number);
   }
 
-  if (unit === 'unité' || unit === 'tranche') {
+  if (['unité', 'tranche', 'paquet', 'pot'].includes(unit)) {
     return Math.max(1, Math.round(amount));
   }
 
@@ -358,6 +403,8 @@ function normalizeUnit(value) {
   if (['cl', 'centilitre', 'centilitres'].includes(raw)) return { unit: 'cl', isRecognized: true };
   if (['l', 'litre', 'litres'].includes(raw)) return { unit: 'l', isRecognized: true };
   if (['tranche', 'tranches'].includes(raw)) return { unit: 'tranche', isRecognized: true };
+  if (['paquet', 'paquets', 'pack'].includes(raw)) return { unit: 'paquet', isRecognized: true };
+  if (['pot', 'pots'].includes(raw)) return { unit: 'pot', isRecognized: true };
   if (['unité', 'unites', 'unités', 'unite', 'pièce', 'piece', 'pièces', 'pieces'].includes(raw)) {
     return { unit: 'unité', isRecognized: true };
   }
@@ -365,10 +412,66 @@ function normalizeUnit(value) {
   return { unit: 'unité', isRecognized: false };
 }
 
-function normalizeCategory(value) {
+function suggestUnit(productName, hasMeasuredAmount = false) {
+  const name = normalizeStorageText(productName);
+
+  if (/\b(jambon|bacon|pain de mie)\b/.test(name)) return 'tranche';
+  if (/\b(oeuf|oeufs)\b/.test(name)) return 'unité';
+  if (/\b(lait|jus|soupe liquide)\b/.test(name)) return 'l';
+  if (/\b(chips|biscuits?|cereales?)\b/.test(name)) {
+    return hasMeasuredAmount ? 'g' : 'paquet';
+  }
+  if (/\b(sel|poivre|paprika|curry|herbes?|epices?)\b/.test(name)) {
+    return hasMeasuredAmount ? 'g' : 'pot';
+  }
+  if (
+    hasMeasuredAmount &&
+    /\b(farine|sucre|pates?|riz|fromages?|viandes?|poissons?)\b/.test(name)
+  ) {
+    return 'g';
+  }
+
+  return 'unité';
+}
+
+function normalizeCategory(value, productName = '') {
+  const name = normalizeStorageText(productName);
+  const rules = [
+    ['frozen', /\b(glaces?|surgeles?|frozen)\b/],
+    ['spicesCondiments', /\b(sel|poivre|paprika|curry|herbes?|epices?|bouillons?|moutarde|ketchup|mayonnaise)\b/],
+    ['seafood', /\b(saumon|thon|cabillaud|poissons?|crevettes?|moules?|fruits? de mer)\b/],
+    ['meat', /\b(jambon|bacon|charcuterie|steak|poulet|viandes?|saucisses?|lardons?)\b/],
+    ['dairy', /\b(lait|creme|fromages?|emmental|yaourts?|beurre|oeufs?)\b/],
+    ['starches', /\b(pates?|riz|semoule|farine|cereales?|avoine|quinoa|lentilles?)\b/],
+    ['savoryGrocery', /\b(chips|conserves?|sauces?|huile|vinaigre|olives?|crackers?)\b/],
+    ['sweetGrocery', /\b(biscuits?|chocolat|bonbons?|sucre|confiture|gateaux?)\b/],
+    ['beverages', /\b(jus|eau|sodas?|boissons?|the|cafe)\b/],
+    ['bakery', /\b(pains?|baguette|croissants?|brioches?|viennoiseries?)\b/],
+    ['preparedMeals', /\b(pizzas?|quiches?|lasagnes?|plats? prepares?|sandwichs?)\b/],
+    ['produce', /\b(tomates?|salades?|pommes?|bananes?|fruits?|legumes?|courgettes?|carottes?|avocats?)\b/],
+  ];
+
+  for (const [category, pattern] of rules) {
+    if (pattern.test(name)) return category;
+  }
+
   const raw = cleanString(value).toLowerCase();
-  const allowed = new Set(['dairy', 'produce', 'meat', 'other']);
-  return allowed.has(raw) ? raw : 'other';
+  const allowed = new Map([
+    ['dairy', 'dairy'],
+    ['produce', 'produce'],
+    ['meat', 'meat'],
+    ['seafood', 'seafood'],
+    ['starches', 'starches'],
+    ['savorygrocery', 'savoryGrocery'],
+    ['sweetgrocery', 'sweetGrocery'],
+    ['beverages', 'beverages'],
+    ['frozen', 'frozen'],
+    ['spicescondiments', 'spicesCondiments'],
+    ['bakery', 'bakery'],
+    ['preparedmeals', 'preparedMeals'],
+    ['other', 'other'],
+  ]);
+  return allowed.get(raw) || 'other';
 }
 
 function normalizeStorageLocation(value, productName = '') {
@@ -406,7 +509,8 @@ function normalizeStorageText(value) {
   return cleanString(value)
     .toLowerCase()
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/œ/g, 'oe');
 }
 
 function jsonResponse(statusCode, body) {
@@ -422,3 +526,6 @@ function jsonResponse(statusCode, body) {
 }
 
 exports.normalizeStorageLocation = normalizeStorageLocation;
+exports.normalizeCategory = normalizeCategory;
+exports.normalizeProduct = normalizeProduct;
+exports.suggestUnit = suggestUnit;

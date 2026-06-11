@@ -65,7 +65,7 @@ abstract final class CloudFoodsService {
       id: row['id'] as String,
       name: row['name'] as String,
       emoji: row['emoji'] as String? ?? '🍽️',
-      category: _categoryFromName(row['category'] as String?),
+      category: FoodCategoryHelper.fromName(row['category'] as String?),
       storageLocation: StorageLocationHelper.fromName(
         row['storage_location'] as String?,
       ),
@@ -80,16 +80,6 @@ abstract final class CloudFoodsService {
       amount: amount,
       unit: row['unit'] as String? ?? 'unité',
     );
-  }
-
-  static FoodCategory _categoryFromName(String? value) {
-    if (value == null) return FoodCategory.other;
-
-    for (final category in FoodCategory.values) {
-      if (category.name == value) return category;
-    }
-
-    return FoodCategory.other;
   }
 
   static int _positiveInt(dynamic value, {required int fallback}) {

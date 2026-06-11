@@ -310,34 +310,7 @@ class _AddCheckedToFridgeSheetState extends State<_AddCheckedToFridgeSheet> {
   }
 
   static FoodCategory _guessCategory(String name) {
-    final normalized = name.toLowerCase();
-
-    if (normalized.contains('lait') ||
-        normalized.contains('crème') ||
-        normalized.contains('creme') ||
-        normalized.contains('fromage') ||
-        normalized.contains('emmental') ||
-        normalized.contains('yaourt')) {
-      return FoodCategory.dairy;
-    }
-
-    if (normalized.contains('jambon') ||
-        normalized.contains('steak') ||
-        normalized.contains('poulet') ||
-        normalized.contains('viande') ||
-        normalized.contains('poisson')) {
-      return FoodCategory.meat;
-    }
-
-    if (normalized.contains('tomate') ||
-        normalized.contains('salade') ||
-        normalized.contains('pomme') ||
-        normalized.contains('légume') ||
-        normalized.contains('legume')) {
-      return FoodCategory.produce;
-    }
-
-    return FoodCategory.other;
+    return FoodCategoryHelper.suggestForName(name);
   }
 
   String _formatDate(DateTime date) {
@@ -501,9 +474,19 @@ class _PurchasedDraftCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Text(
-                FoodCategoryHelper.emoji(draft.category),
-                style: const TextStyle(fontSize: 28),
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: colorScheme.primaryContainer.withValues(alpha: 0.45),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                alignment: Alignment.center,
+                child: Icon(
+                  FoodCategoryHelper.icon(draft.category),
+                  size: 24,
+                  color: colorScheme.primary,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(

@@ -14,6 +14,7 @@ import 'screens/profile_screen.dart';
 import 'screens/recipes_screen.dart';
 import 'screens/scan_screen.dart';
 import 'screens/shopping_list_screen.dart';
+import 'screens/stock_setup_screen.dart';
 import 'services/auth_service.dart';
 import 'services/cloud_favorite_recipes_service.dart';
 import 'services/cloud_foods_service.dart';
@@ -148,6 +149,7 @@ class _MainNavigation extends StatefulWidget {
 
 class _MainNavigationState extends State<_MainNavigation> {
   static const _fridgeTabIndex = 1;
+  static const _scanTabIndex = 2;
   static const _shoppingTabIndex = 4;
   static const _cloudSyncDelay = Duration(milliseconds: 1200);
 
@@ -433,6 +435,17 @@ class _MainNavigationState extends State<_MainNavigation> {
     setState(() => _selectedIndex = index);
   }
 
+  void _openStockSetup() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => StockSetupScreen(
+          store: widget.stores.fridgeStore,
+          onOpenScan: () => _goToTab(_scanTabIndex),
+        ),
+      ),
+    );
+  }
+
   Future<void> _resetDemoData() async {
     widget.stores.fridgeStore.resetDemoData();
     widget.stores.shoppingListStore.clearAll();
@@ -457,11 +470,9 @@ class _MainNavigationState extends State<_MainNavigation> {
         shoppingListStore: shoppingListStore,
         scanHistoryStore: scanHistoryStore,
         onNavigateToTab: _goToTab,
+        onOpenStockSetup: _openStockSetup,
       ),
-      FridgeScreen(
-        store: fridgeStore,
-        shoppingStore: shoppingListStore,
-      ),
+      FridgeScreen(store: fridgeStore, shoppingStore: shoppingListStore),
       ScanScreen(
         store: fridgeStore,
         historyStore: scanHistoryStore,
@@ -493,10 +504,7 @@ class _MainNavigationState extends State<_MainNavigation> {
     ];
 
     return Scaffold(
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: screens,
-      ),
+      body: IndexedStack(index: _selectedIndex, children: screens),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: _goToTab,

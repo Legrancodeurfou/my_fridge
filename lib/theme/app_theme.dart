@@ -115,6 +115,8 @@ abstract final class AppTheme {
         style: FilledButton.styleFrom(
           backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
+          elevation: 2,
+          shadowColor: AppColors.shadow.withValues(alpha: 0.22),
           textStyle: const TextStyle(
             fontFamily: 'PlusJakartaSans',
             fontWeight: FontWeight.w700,
@@ -127,6 +129,9 @@ abstract final class AppTheme {
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.primary,
+          backgroundColor: AppColors.card,
+          elevation: 1,
+          shadowColor: AppColors.shadow.withValues(alpha: 0.14),
           side: const BorderSide(color: AppColors.primary),
           textStyle: const TextStyle(
             fontFamily: 'PlusJakartaSans',
@@ -140,6 +145,8 @@ abstract final class AppTheme {
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
+        elevation: 3,
+        highlightElevation: 5,
       ),
       inputDecorationTheme: InputDecorationThemeData(
         filled: true,

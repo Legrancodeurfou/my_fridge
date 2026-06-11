@@ -43,9 +43,7 @@ class TicketRawProduct {
 
     final unit = json['unit'] as String? ?? 'unité';
 
-    final categoryKey = json['category'] as String? ?? 'other';
-    final category =
-        FoodCategory.values.asNameMap()[categoryKey] ?? FoodCategory.other;
+    final category = FoodCategoryHelper.fromName(json['category'] as String?);
     final rawStorageLocation = json['storageLocation'];
     final storageLocation = StorageLocationHelper.fromName(
       rawStorageLocation is String ? rawStorageLocation : null,

@@ -41,8 +41,8 @@ class FoodItem {
     this.quantity = 1,
     this.amount = 1,
     this.unit = 'unité',
-  })  : assert(quantity >= 1),
-        assert(amount > 0);
+  }) : assert(quantity >= 1),
+       assert(amount > 0);
 
   final String id;
   final String name;
@@ -120,7 +120,7 @@ class FoodItem {
       name: json['name'] as String,
       emoji: json['emoji'] as String,
       expiryDate: DateTime.parse(json['expiryDate'] as String),
-      category: FoodCategory.values.byName(json['category'] as String),
+      category: FoodCategoryHelper.fromName(json['category'] as String?),
       storageLocation: StorageLocationHelper.fromName(
         json['storageLocation'] as String?,
       ),
@@ -132,14 +132,26 @@ class FoodItem {
 }
 
 abstract final class MeasurementHelper {
-  static const units = ['g', 'kg', 'ml', 'cl', 'l', 'unité', 'tranche'];
+  static const units = [
+    'g',
+    'kg',
+    'ml',
+    'cl',
+    'l',
+    'unité',
+    'tranche',
+    'paquet',
+    'pot',
+  ];
 
   static String normalizeUnit(String unit) {
     return unit
         .trim()
         .toLowerCase()
         .replaceAll('unités', 'unité')
-        .replaceAll('tranches', 'tranche');
+        .replaceAll('tranches', 'tranche')
+        .replaceAll('paquets', 'paquet')
+        .replaceAll('pots', 'pot');
   }
 
   static bool areCompatible(String firstUnit, String secondUnit) {
@@ -195,6 +207,8 @@ abstract final class MeasurementHelper {
       'cl' => 5,
       'l' => 0.5,
       'tranche' => 1,
+      'paquet' => 1,
+      'pot' => 1,
       'unité' => 1,
       _ => 1,
     };
@@ -202,7 +216,10 @@ abstract final class MeasurementHelper {
 
   static int logicalQuantity(double amount, String unit) {
     final normalizedUnit = normalizeUnit(unit);
-    if (normalizedUnit == 'unité' || normalizedUnit == 'tranche') {
+    if (normalizedUnit == 'unité' ||
+        normalizedUnit == 'tranche' ||
+        normalizedUnit == 'paquet' ||
+        normalizedUnit == 'pot') {
       return amount.round().clamp(1, 9999);
     }
     return 1;
@@ -214,6 +231,8 @@ abstract final class MeasurementHelper {
       'ml' || 'cl' || 'l' => 'volume',
       'unité' => 'unit',
       'tranche' => 'slice',
+      'paquet' => 'package',
+      'pot' => 'jar',
       _ => null,
     };
   }
@@ -232,19 +251,59 @@ abstract final class MeasurementHelper {
     return switch (unit) {
       'unité' => 'unités',
       'tranche' => 'tranches',
+      'paquet' => 'paquets',
+      'pot' => 'pots',
       _ => unit,
     };
   }
 }
 
-enum FoodCategory { dairy, produce, meat, other }
+enum FoodCategory {
+  dairy,
+  produce,
+  meat,
+  other,
+  seafood,
+  starches,
+  savoryGrocery,
+  sweetGrocery,
+  beverages,
+  frozen,
+  spicesCondiments,
+  bakery,
+  preparedMeals,
+}
 
 abstract final class FoodCategoryHelper {
+  static FoodCategory fromName(String? value) {
+    if (value == null) return FoodCategory.other;
+
+    return FoodCategory.values.asNameMap()[value] ??
+        switch (value.trim().toLowerCase()) {
+          'fish' || 'seafood' => FoodCategory.seafood,
+          'starch' || 'cereals' => FoodCategory.starches,
+          'savory_grocery' => FoodCategory.savoryGrocery,
+          'sweet_grocery' => FoodCategory.sweetGrocery,
+          'spices_condiments' => FoodCategory.spicesCondiments,
+          'prepared_meals' => FoodCategory.preparedMeals,
+          _ => FoodCategory.other,
+        };
+  }
+
   static String label(FoodCategory category) {
     return switch (category) {
       FoodCategory.dairy => 'Produits laitiers',
       FoodCategory.produce => 'Fruits & légumes',
-      FoodCategory.meat => 'Viande & poisson',
+      FoodCategory.meat => 'Viande & charcuterie',
+      FoodCategory.seafood => 'Poisson & fruits de mer',
+      FoodCategory.starches => 'Féculents & céréales',
+      FoodCategory.savoryGrocery => 'Épicerie salée',
+      FoodCategory.sweetGrocery => 'Épicerie sucrée',
+      FoodCategory.beverages => 'Boissons',
+      FoodCategory.frozen => 'Surgelés',
+      FoodCategory.spicesCondiments => 'Épices & condiments',
+      FoodCategory.bakery => 'Boulangerie',
+      FoodCategory.preparedMeals => 'Plats préparés',
       FoodCategory.other => 'Autre',
     };
   }
@@ -254,9 +313,239 @@ abstract final class FoodCategoryHelper {
       FoodCategory.dairy => '🥛',
       FoodCategory.produce => '🥬',
       FoodCategory.meat => '🥩',
+      FoodCategory.seafood => '🐟',
+      FoodCategory.starches => '🍝',
+      FoodCategory.savoryGrocery => '🥫',
+      FoodCategory.sweetGrocery => '🍪',
+      FoodCategory.beverages => '🥤',
+      FoodCategory.frozen => '❄️',
+      FoodCategory.spicesCondiments => '🧂',
+      FoodCategory.bakery => '🥖',
+      FoodCategory.preparedMeals => '🍲',
       FoodCategory.other => '🍽️',
     };
   }
+
+  static IconData icon(FoodCategory category) {
+    return switch (category) {
+      FoodCategory.dairy => Icons.egg_alt_outlined,
+      FoodCategory.produce => Icons.eco_outlined,
+      FoodCategory.meat => Icons.lunch_dining_outlined,
+      FoodCategory.seafood => Icons.set_meal_outlined,
+      FoodCategory.starches => Icons.rice_bowl_outlined,
+      FoodCategory.savoryGrocery => Icons.inventory_2_outlined,
+      FoodCategory.sweetGrocery => Icons.cookie_outlined,
+      FoodCategory.beverages => Icons.local_drink_outlined,
+      FoodCategory.frozen => Icons.ac_unit_rounded,
+      FoodCategory.spicesCondiments => Icons.spa_outlined,
+      FoodCategory.bakery => Icons.bakery_dining_outlined,
+      FoodCategory.preparedMeals => Icons.soup_kitchen_outlined,
+      FoodCategory.other => Icons.restaurant_outlined,
+    };
+  }
+
+  static FoodCategory suggestForName(String name) {
+    final normalized = _normalizeProductName(name);
+
+    if (_containsAny(normalized, ['glace', 'surgel', 'frozen'])) {
+      return FoodCategory.frozen;
+    }
+    if (_containsAny(normalized, [
+      'poivre',
+      'sel',
+      'paprika',
+      'curry',
+      'epice',
+      'herbe',
+      'bouillon',
+      'moutarde',
+      'ketchup',
+      'mayonnaise',
+    ])) {
+      return FoodCategory.spicesCondiments;
+    }
+    if (_containsAny(normalized, [
+      'saumon',
+      'thon',
+      'cabillaud',
+      'poisson',
+      'crevette',
+      'moule',
+      'fruit de mer',
+    ])) {
+      return FoodCategory.seafood;
+    }
+    if (_containsAny(normalized, [
+      'jambon',
+      'bacon',
+      'charcuterie',
+      'steak',
+      'poulet',
+      'viande',
+      'saucisse',
+      'lardon',
+    ])) {
+      return FoodCategory.meat;
+    }
+    if (_containsAny(normalized, [
+      'lait',
+      'creme',
+      'fromage',
+      'emmental',
+      'yaourt',
+      'beurre',
+      'oeuf',
+    ])) {
+      return FoodCategory.dairy;
+    }
+    if (_containsAny(normalized, [
+      'pate',
+      'riz',
+      'semoule',
+      'farine',
+      'cereale',
+      'avoine',
+      'quinoa',
+      'lentille',
+    ])) {
+      return FoodCategory.starches;
+    }
+    if (_containsAny(normalized, [
+      'chips',
+      'conserve',
+      'sauce',
+      'huile',
+      'vinaigre',
+      'olive',
+      'cracker',
+    ])) {
+      return FoodCategory.savoryGrocery;
+    }
+    if (_containsAny(normalized, [
+      'biscuit',
+      'chocolat',
+      'bonbon',
+      'sucre',
+      'confiture',
+      'gateau',
+    ])) {
+      return FoodCategory.sweetGrocery;
+    }
+    if (_containsAny(normalized, [
+      'jus',
+      'eau',
+      'soda',
+      'boisson',
+      'the',
+      'cafe',
+    ])) {
+      return FoodCategory.beverages;
+    }
+    if (_containsAny(normalized, [
+      'pain',
+      'baguette',
+      'croissant',
+      'brioche',
+      'viennoiserie',
+    ])) {
+      return FoodCategory.bakery;
+    }
+    if (_containsAny(normalized, [
+      'pizza',
+      'quiche',
+      'lasagne',
+      'plat prepare',
+      'sandwich',
+    ])) {
+      return FoodCategory.preparedMeals;
+    }
+    if (_containsAny(normalized, [
+      'tomate',
+      'salade',
+      'pomme',
+      'banane',
+      'fruit',
+      'legume',
+      'courgette',
+      'carotte',
+      'avocat',
+    ])) {
+      return FoodCategory.produce;
+    }
+
+    return FoodCategory.other;
+  }
+}
+
+abstract final class FoodUnitHelper {
+  static String suggestForName(
+    String name, {
+    bool hasMeasuredAmount = false,
+    bool useCommonDefault = false,
+  }) {
+    final normalized = _normalizeProductName(name);
+
+    if (_containsAny(normalized, ['jambon', 'bacon', 'pain de mie'])) {
+      return 'tranche';
+    }
+    if (_containsAny(normalized, ['oeuf', 'oeufs'])) return 'unité';
+    if (_containsAny(normalized, ['lait', 'jus', 'soupe liquide'])) return 'l';
+    if (_containsAny(normalized, ['chips', 'biscuit', 'cereale'])) {
+      return hasMeasuredAmount ? 'g' : 'paquet';
+    }
+    if (_containsAny(normalized, [
+      'poivre',
+      'sel',
+      'paprika',
+      'curry',
+      'epice',
+      'herbe',
+    ])) {
+      return hasMeasuredAmount ? 'g' : 'pot';
+    }
+    if ((hasMeasuredAmount || useCommonDefault) &&
+        _containsAny(normalized, [
+          'farine',
+          'sucre',
+          'pate',
+          'riz',
+          'fromage',
+          'viande',
+          'poisson',
+        ])) {
+      return 'g';
+    }
+
+    return 'unité';
+  }
+
+  static double defaultAmountFor(String unit) {
+    return switch (MeasurementHelper.normalizeUnit(unit)) {
+      'g' => 100,
+      'kg' => 1,
+      'ml' => 500,
+      'cl' => 50,
+      'l' => 1,
+      _ => 1,
+    };
+  }
+}
+
+String _normalizeProductName(String value) {
+  return value
+      .trim()
+      .toLowerCase()
+      .replaceAll(RegExp(r'[àáâä]'), 'a')
+      .replaceAll(RegExp(r'[ç]'), 'c')
+      .replaceAll(RegExp(r'[èéêë]'), 'e')
+      .replaceAll(RegExp(r'[îï]'), 'i')
+      .replaceAll(RegExp(r'[ôö]'), 'o')
+      .replaceAll(RegExp(r'[ùûü]'), 'u')
+      .replaceAll('œ', 'oe');
+}
+
+bool _containsAny(String value, List<String> terms) {
+  return terms.any(value.contains);
 }
 
 /// Données de démo. Remplacer par un appel repository ou une base locale.
@@ -375,8 +664,11 @@ abstract final class ExpiryHelper {
   }
 
   static int daysUntilExpiry(DateTime expiryDate) {
-    final normalized =
-        DateTime(expiryDate.year, expiryDate.month, expiryDate.day);
+    final normalized = DateTime(
+      expiryDate.year,
+      expiryDate.month,
+      expiryDate.day,
+    );
     return normalized.difference(_today).inDays;
   }
 
@@ -417,11 +709,6 @@ abstract final class ExpiryHelper {
   }
 
   static IconData iconForCategory(FoodCategory category) {
-    return switch (category) {
-      FoodCategory.dairy => Icons.egg_alt_outlined,
-      FoodCategory.produce => Icons.eco_outlined,
-      FoodCategory.meat => Icons.set_meal_outlined,
-      FoodCategory.other => Icons.restaurant_outlined,
-    };
+    return FoodCategoryHelper.icon(category);
   }
 }

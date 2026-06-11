@@ -17,6 +17,7 @@ class HomeScreen extends StatelessWidget {
     required this.shoppingListStore,
     required this.scanHistoryStore,
     required this.onNavigateToTab,
+    required this.onOpenStockSetup,
   });
 
   final FridgeStore store;
@@ -24,6 +25,7 @@ class HomeScreen extends StatelessWidget {
   final ShoppingListStore shoppingListStore;
   final ScanHistoryStore scanHistoryStore;
   final void Function(int tabIndex) onNavigateToTab;
+  final VoidCallback onOpenStockSetup;
 
   static const fridgeTabIndex = 1;
   static const scanTabIndex = 2;
@@ -43,12 +45,14 @@ class HomeScreen extends StatelessWidget {
         foods: store.foods,
         profile: profileStore.profile,
         shoppingItemsCount: shoppingListStore.items.length,
-        checkedShoppingItemsCount:
-            shoppingListStore.items.where((item) => item.isChecked).length,
+        checkedShoppingItemsCount: shoppingListStore.items
+            .where((item) => item.isChecked)
+            .length,
         latestScan: scanHistoryStore.items.isEmpty
             ? null
             : scanHistoryStore.items.first,
         onNavigateToTab: onNavigateToTab,
+        onOpenStockSetup: onOpenStockSetup,
       ),
     );
   }
@@ -62,6 +66,7 @@ class _HomeContent extends StatelessWidget {
     required this.checkedShoppingItemsCount,
     required this.latestScan,
     required this.onNavigateToTab,
+    required this.onOpenStockSetup,
   });
 
   final List<FoodItem> foods;
@@ -70,6 +75,7 @@ class _HomeContent extends StatelessWidget {
   final int checkedShoppingItemsCount;
   final ScanHistoryItem? latestScan;
   final void Function(int tabIndex) onNavigateToTab;
+  final VoidCallback onOpenStockSetup;
 
   int get _pendingShoppingItemsCount =>
       shoppingItemsCount - checkedShoppingItemsCount;
@@ -79,14 +85,13 @@ class _HomeContent extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final stats = FridgeStats.fromItems(foods);
-    final suggestedRecipes = RecipeCatalog.suggestFor(
-      foods,
-      profile: profile,
-    );
+    final suggestedRecipes = RecipeCatalog.suggestFor(foods, profile: profile);
     final feasibleRecipeCount = suggestedRecipes
         .where(
-          (recipe) => RecipeCatalog.matchIngredients(recipe, foods)
-              .every((match) => match.isAvailable),
+          (recipe) => RecipeCatalog.matchIngredients(
+            recipe,
+            foods,
+          ).every((match) => match.isAvailable),
         )
         .length;
     final expiringSoonFoods = _expiringSoonFoods(foods);
@@ -125,6 +130,10 @@ class _HomeContent extends StatelessWidget {
               color: colorScheme.onSurfaceVariant,
             ),
           ),
+          if (foods.length <= 3) ...[
+            const SizedBox(height: 20),
+            _StockSetupPromptCard(onTap: onOpenStockSetup),
+          ],
           const SizedBox(height: 24),
           _SummaryStatsCard(
             totalFoods: stats.total,
@@ -158,6 +167,16 @@ class _HomeContent extends StatelessWidget {
             color: colorScheme.primary,
             onTap: () => onNavigateToTab(HomeScreen.fridgeTabIndex),
           ),
+          if (foods.length > 3) ...[
+            const SizedBox(height: 12),
+            _QuickActionCard(
+              icon: Icons.inventory_2_outlined,
+              title: 'Remplir mon stock',
+              subtitle: 'Ajoute rapidement des aliments zone par zone',
+              color: colorScheme.primary,
+              onTap: onOpenStockSetup,
+            ),
+          ],
           const SizedBox(height: 12),
           _QuickActionCard(
             icon: Icons.document_scanner_outlined,
@@ -172,11 +191,11 @@ class _HomeContent extends StatelessWidget {
             title: 'Voir les recettes',
             subtitle: feasibleRecipeCount > 0
                 ? '$feasibleRecipeCount recette'
-                    '${feasibleRecipeCount > 1 ? 's' : ''} faisable'
-                    '${feasibleRecipeCount > 1 ? 's' : ''} maintenant'
+                      '${feasibleRecipeCount > 1 ? 's' : ''} faisable'
+                      '${feasibleRecipeCount > 1 ? 's' : ''} maintenant'
                 : suggestedRecipes.isEmpty
-                    ? 'Ajoute des aliments non expirés pour obtenir des idées'
-                    : 'Découvre les idées à compléter avec quelques ingrédients',
+                ? 'Ajoute des aliments non expirés pour obtenir des idées'
+                : 'Découvre les idées à compléter avec quelques ingrédients',
             color: AppColors.primary,
             onTap: () => onNavigateToTab(HomeScreen.recipesTabIndex),
           ),
@@ -214,7 +233,8 @@ class _HomeContent extends StatelessWidget {
       actions.add(
         _SmartActionCard(
           icon: Icons.error_outline_rounded,
-          title: '${stats.expired} aliment${stats.expired > 1 ? 's' : ''} expiré${stats.expired > 1 ? 's' : ''}',
+          title:
+              '${stats.expired} aliment${stats.expired > 1 ? 's' : ''} expiré${stats.expired > 1 ? 's' : ''}',
           subtitle: 'Vérifie ton frigo et retire ce qui n’est plus bon.',
           color: colorScheme.error,
           onTap: () => onNavigateToTab(HomeScreen.fridgeTabIndex),
@@ -224,7 +244,8 @@ class _HomeContent extends StatelessWidget {
       actions.add(
         _SmartActionCard(
           icon: Icons.schedule_rounded,
-          title: '${stats.expiringSoon} aliment${stats.expiringSoon > 1 ? 's' : ''} à consommer vite',
+          title:
+              '${stats.expiringSoon} aliment${stats.expiringSoon > 1 ? 's' : ''} à consommer vite',
           subtitle: expiringSoonFoods.isEmpty
               ? 'Va voir ce qui approche de la date limite.'
               : 'Priorité : ${expiringSoonFoods.first.name}.',
@@ -238,7 +259,8 @@ class _HomeContent extends StatelessWidget {
       actions.add(
         _SmartActionCard(
           icon: Icons.restaurant_menu_rounded,
-          title: '$feasibleRecipeCount recette'
+          title:
+              '$feasibleRecipeCount recette'
               '${feasibleRecipeCount > 1 ? 's' : ''} faisable'
               '${feasibleRecipeCount > 1 ? 's' : ''} maintenant',
           subtitle: 'Tous les ingrédients nécessaires sont disponibles.',
@@ -251,8 +273,7 @@ class _HomeContent extends StatelessWidget {
         _SmartActionCard(
           icon: Icons.restaurant_menu_rounded,
           title: 'Des idées recettes à compléter',
-          subtitle:
-              'Aucune recette n’est entièrement faisable pour l’instant.',
+          subtitle: 'Aucune recette n’est entièrement faisable pour l’instant.',
           color: AppColors.expiringSoon,
           onTap: () => onNavigateToTab(HomeScreen.recipesTabIndex),
         ),
@@ -263,7 +284,8 @@ class _HomeContent extends StatelessWidget {
       actions.add(
         _SmartActionCard(
           icon: Icons.shopping_cart_rounded,
-          title: '$_pendingShoppingItemsCount article${_pendingShoppingItemsCount > 1 ? 's' : ''} à acheter',
+          title:
+              '$_pendingShoppingItemsCount article${_pendingShoppingItemsCount > 1 ? 's' : ''} à acheter',
           subtitle: checkedShoppingItemsCount > 0
               ? '$checkedShoppingItemsCount déjà coché${checkedShoppingItemsCount > 1 ? 's' : ''}.'
               : 'Complète ta liste avant les courses.',
@@ -312,8 +334,9 @@ class _HomeContent extends StatelessWidget {
     }).toList();
 
     urgent.sort(
-      (a, b) => ExpiryHelper.daysUntilExpiry(a.expiryDate)
-          .compareTo(ExpiryHelper.daysUntilExpiry(b.expiryDate)),
+      (a, b) => ExpiryHelper.daysUntilExpiry(
+        a.expiryDate,
+      ).compareTo(ExpiryHelper.daysUntilExpiry(b.expiryDate)),
     );
 
     return urgent.take(4).toList();
@@ -362,10 +385,7 @@ class _SectionHeader extends StatelessWidget {
           ),
         ),
         if (actionLabel != null)
-          TextButton(
-            onPressed: onActionTap,
-            child: Text(actionLabel!),
-          ),
+          TextButton(onPressed: onActionTap, child: Text(actionLabel!)),
       ],
     );
   }
@@ -496,10 +516,79 @@ class _HomeDivider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return Container(width: 1, height: 48, color: color.withValues(alpha: 0.6));
+  }
+}
+
+class _StockSetupPromptCard extends StatelessWidget {
+  const _StockSetupPromptCard({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return Container(
-      width: 1,
-      height: 48,
-      color: color.withValues(alpha: 0.6),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: colorScheme.primaryContainer.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: colorScheme.primary.withValues(alpha: 0.22)),
+        boxShadow: [
+          BoxShadow(
+            color: colorScheme.shadow.withValues(alpha: 0.07),
+            blurRadius: 16,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: colorScheme.surface,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(
+                  Icons.inventory_2_outlined,
+                  color: colorScheme.primary,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Text(
+                  'Commence par remplir ton stock',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Ajoute ce que tu as déjà chez toi pour obtenir de meilleures '
+            'recettes et éviter le gaspillage.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            onPressed: onTap,
+            icon: const Icon(Icons.arrow_forward_rounded),
+            label: const Text('Mise en route'),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -535,6 +624,13 @@ class _SmartActionCard extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(18),
             border: Border.all(color: color.withValues(alpha: 0.18)),
+            boxShadow: [
+              BoxShadow(
+                color: colorScheme.shadow.withValues(alpha: 0.07),
+                blurRadius: 14,
+                offset: const Offset(0, 5),
+              ),
+            ],
           ),
           child: Row(
             children: [
@@ -620,9 +716,9 @@ class _QuickActionCard extends StatelessWidget {
             ),
             boxShadow: [
               BoxShadow(
-                color: colorScheme.shadow.withValues(alpha: 0.05),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
+                color: colorScheme.shadow.withValues(alpha: 0.07),
+                blurRadius: 14,
+                offset: const Offset(0, 5),
               ),
             ],
           ),
@@ -686,7 +782,8 @@ class _ExpiringFoodTile extends StatelessWidget {
     final urgency = ExpiryHelper.urgencyFor(food.expiryDate);
     final urgencyColor = ExpiryHelper.colorFor(urgency);
     final urgencyBackground = ExpiryHelper.backgroundFor(urgency);
-    final expiryLabel = '${food.amountLabel} • ${ExpiryHelper.labelFor(food.expiryDate)}';
+    final expiryLabel =
+        '${food.amountLabel} • ${ExpiryHelper.labelFor(food.expiryDate)}';
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -707,7 +804,11 @@ class _ExpiringFoodTile extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
             ),
             alignment: Alignment.center,
-            child: Text(food.emoji, style: const TextStyle(fontSize: 22)),
+            child: Icon(
+              FoodCategoryHelper.icon(food.category),
+              size: 22,
+              color: urgencyColor,
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -731,11 +832,7 @@ class _ExpiringFoodTile extends StatelessWidget {
               ],
             ),
           ),
-          Icon(
-            Icons.warning_amber_rounded,
-            color: urgencyColor,
-            size: 22,
-          ),
+          Icon(Icons.warning_amber_rounded, color: urgencyColor, size: 22),
         ],
       ),
     );

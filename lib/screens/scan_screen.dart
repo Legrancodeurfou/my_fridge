@@ -1843,7 +1843,7 @@ class _DetectedProductTile extends StatelessWidget {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(draft.emoji, style: const TextStyle(fontSize: 26)),
+                    _DetectedProductIcon(draft: draft),
                     const SizedBox(width: 12),
                     Expanded(child: nameColumn),
                   ],
@@ -1857,13 +1857,39 @@ class _DetectedProductTile extends StatelessWidget {
           return Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Text(draft.emoji, style: const TextStyle(fontSize: 26)),
+              _DetectedProductIcon(draft: draft),
               const SizedBox(width: 12),
               Expanded(child: nameColumn),
               controlsRow,
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _DetectedProductIcon extends StatelessWidget {
+  const _DetectedProductIcon({required this.draft});
+
+  final DetectedProductDraft draft;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      width: 42,
+      height: 42,
+      decoration: BoxDecoration(
+        color: colorScheme.primaryContainer.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      alignment: Alignment.center,
+      child: Icon(
+        FoodCategoryHelper.icon(draft.category),
+        size: 23,
+        color: colorScheme.primary,
       ),
     );
   }
@@ -1944,6 +1970,8 @@ class _ManualFoodFormSheetState extends State<_ManualFoodFormSheet> {
   double _amount = 1;
   String _unit = 'unité';
   FoodCategory _category = FoodCategory.other;
+  bool _categoryWasEdited = false;
+  bool _unitWasEdited = false;
   late DateTime _expiryDate;
 
   @override
@@ -1972,6 +2000,24 @@ class _ManualFoodFormSheetState extends State<_ManualFoodFormSheet> {
     final nextAmount = _amount - MeasurementHelper.stepFor(_unit);
     if (nextAmount <= 0) return;
     setState(() => _amount = nextAmount);
+  }
+
+  void _applyNameSuggestions(String name) {
+    setState(() {
+      if (!_categoryWasEdited) {
+        _category = FoodCategoryHelper.suggestForName(name);
+      }
+      if (!_unitWasEdited) {
+        final suggestedUnit = FoodUnitHelper.suggestForName(
+          name,
+          useCommonDefault: true,
+        );
+        if (suggestedUnit != _unit) {
+          _unit = suggestedUnit;
+          _amount = FoodUnitHelper.defaultAmountFor(suggestedUnit);
+        }
+      }
+    });
   }
 
   Future<void> _pickExpiryDate() async {
@@ -2083,6 +2129,7 @@ class _ManualFoodFormSheetState extends State<_ManualFoodFormSheet> {
                 const SizedBox(height: 22),
                 TextFormField(
                   controller: _nameController,
+                  onChanged: _applyNameSuggestions,
                   textCapitalization: TextCapitalization.sentences,
                   textInputAction: TextInputAction.next,
                   decoration: const InputDecoration(
@@ -2112,7 +2159,10 @@ class _ManualFoodFormSheetState extends State<_ManualFoodFormSheet> {
                   }).toList(),
                   onChanged: (value) {
                     if (value == null) return;
-                    setState(() => _category = value);
+                    setState(() {
+                      _category = value;
+                      _categoryWasEdited = true;
+                    });
                   },
                 ),
                 const SizedBox(height: 14),
@@ -2148,6 +2198,7 @@ class _ManualFoodFormSheetState extends State<_ManualFoodFormSheet> {
                               toUnit: value,
                             );
                             _unit = value;
+                            _unitWasEdited = true;
                           });
                         },
                       ),

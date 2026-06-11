@@ -632,9 +632,15 @@ class _StorageFilterBar extends StatelessWidget {
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: colorScheme.shadow.withValues(alpha: 0.05),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
+                          color: colorScheme.shadow.withValues(
+                            alpha: selectedLocation == locations[index]
+                                ? 0.12
+                                : 0.07,
+                          ),
+                          blurRadius: selectedLocation == locations[index]
+                              ? 16
+                              : 12,
+                          offset: const Offset(0, 5),
                         ),
                       ],
                     ),
@@ -865,7 +871,11 @@ class _FoodCard extends StatelessWidget {
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
-                      Text(food.emoji, style: const TextStyle(fontSize: 28)),
+                      Icon(
+                        FoodCategoryHelper.icon(food.category),
+                        size: 28,
+                        color: urgencyColor,
+                      ),
                       Positioned(
                         right: 4,
                         bottom: 4,
@@ -1126,9 +1136,10 @@ class _FoodDetailSheet extends StatelessWidget {
                       borderRadius: BorderRadius.circular(18),
                     ),
                     alignment: Alignment.center,
-                    child: Text(
-                      food.emoji,
-                      style: const TextStyle(fontSize: 32),
+                    child: Icon(
+                      FoodCategoryHelper.icon(food.category),
+                      size: 32,
+                      color: urgencyColor,
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -1623,6 +1634,8 @@ class _FoodFormSheetState extends State<_FoodFormSheet> {
   late DateTime _expiryDate;
   late double _amount;
   late String _unit;
+  late bool _categoryWasEdited;
+  late bool _unitWasEdited;
 
   bool get _isEditing => widget.foodToEdit != null;
 
@@ -1635,6 +1648,8 @@ class _FoodFormSheetState extends State<_FoodFormSheet> {
     _storageLocation = food?.storageLocation ?? StorageLocation.fridge;
     _amount = food?.amount ?? 1;
     _unit = food?.unit ?? 'unité';
+    _categoryWasEdited = food != null;
+    _unitWasEdited = food != null;
     _expiryDate =
         food?.expiryDate ??
         DateTime(
@@ -1652,6 +1667,24 @@ class _FoodFormSheetState extends State<_FoodFormSheet> {
     final nextAmount = _amount - MeasurementHelper.stepFor(_unit);
     if (nextAmount <= 0) return;
     setState(() => _amount = nextAmount);
+  }
+
+  void _applyNameSuggestions(String name) {
+    setState(() {
+      if (!_categoryWasEdited) {
+        _category = FoodCategoryHelper.suggestForName(name);
+      }
+      if (!_unitWasEdited) {
+        final suggestedUnit = FoodUnitHelper.suggestForName(
+          name,
+          useCommonDefault: true,
+        );
+        if (suggestedUnit != _unit) {
+          _unit = suggestedUnit;
+          _amount = FoodUnitHelper.defaultAmountFor(suggestedUnit);
+        }
+      }
+    });
   }
 
   @override
@@ -1766,6 +1799,7 @@ class _FoodFormSheetState extends State<_FoodFormSheet> {
                 const SizedBox(height: 24),
                 TextFormField(
                   controller: _nameController,
+                  onChanged: _applyNameSuggestions,
                   textCapitalization: TextCapitalization.sentences,
                   textInputAction: TextInputAction.next,
                   decoration: _sheetInputDecoration(
@@ -1796,10 +1830,7 @@ class _FoodFormSheetState extends State<_FoodFormSheet> {
                           value: category,
                           child: Row(
                             children: [
-                              Text(
-                                FoodCategoryHelper.emoji(category),
-                                style: const TextStyle(fontSize: 20),
-                              ),
+                              Icon(FoodCategoryHelper.icon(category), size: 20),
                               const SizedBox(width: 10),
                               Text(FoodCategoryHelper.label(category)),
                             ],
@@ -1808,7 +1839,12 @@ class _FoodFormSheetState extends State<_FoodFormSheet> {
                       )
                       .toList(),
                   onChanged: (value) {
-                    if (value != null) setState(() => _category = value);
+                    if (value != null) {
+                      setState(() {
+                        _category = value;
+                        _categoryWasEdited = true;
+                      });
+                    }
                   },
                 ),
                 const SizedBox(height: 16),
@@ -1887,6 +1923,7 @@ class _FoodFormSheetState extends State<_FoodFormSheet> {
                               toUnit: value,
                             );
                             _unit = value;
+                            _unitWasEdited = true;
                           });
                         },
                       ),

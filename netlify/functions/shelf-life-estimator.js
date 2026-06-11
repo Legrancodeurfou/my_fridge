@@ -138,9 +138,15 @@ function normalizeShelfLifeDays(value, category, name) {
 }
 
 function fallbackDaysForCategory(category) {
-  if (category === 'meat') return 7;
+  if (category === 'meat' || category === 'seafood') return 7;
   if (category === 'produce') return 7;
   if (category === 'dairy') return 14;
+  if (category === 'bakery') return 5;
+  if (category === 'preparedMeals') return 5;
+  if (category === 'frozen') return 90;
+  if (category === 'starches') return 180;
+  if (category === 'savoryGrocery' || category === 'sweetGrocery') return 90;
+  if (category === 'spicesCondiments') return 180;
   return 30;
 }
 
