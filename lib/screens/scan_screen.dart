@@ -860,6 +860,8 @@ class _RecentScansSection extends StatelessWidget {
     messenger.clearSnackBars();
     messenger.showSnackBar(
       SnackBar(
+        duration: const Duration(seconds: 4),
+        persist: false,
         content: const Text('Scan supprimé de l’historique'),
         action: SnackBarAction(
           label: 'Annuler',

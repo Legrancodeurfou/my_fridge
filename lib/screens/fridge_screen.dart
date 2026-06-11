@@ -27,6 +27,8 @@ class FridgeScreen extends StatefulWidget {
 }
 
 class _FridgeScreenState extends State<FridgeScreen> {
+  static const _deletionSnackBarDuration = Duration(seconds: 4);
+
   final _searchController = TextEditingController();
   final Set<String> _selectedFoodIds = {};
   String _searchQuery = '';
@@ -143,6 +145,8 @@ class _FridgeScreenState extends State<FridgeScreen> {
     messenger.clearSnackBars();
     messenger.showSnackBar(
       SnackBar(
+        duration: _deletionSnackBarDuration,
+        persist: false,
         content: Text(
           '$deletedCount aliment${deletedCount > 1 ? 's' : ''} '
           'supprimé${deletedCount > 1 ? 's' : ''} du stock',
@@ -175,6 +179,15 @@ class _FridgeScreenState extends State<FridgeScreen> {
             _showFoodFormSheet(foodToEdit: food);
           },
           onDelete: () => _deleteFoodWithUndo(sheetContext, food),
+          onMove: () {
+            Navigator.pop(sheetContext);
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _showMoveFoodSheet(food);
+            });
+          },
+          onMoveToFreezer: food.storageLocation == StorageLocation.freezer
+              ? null
+              : () => _moveFoodTo(sheetContext, food, StorageLocation.freezer),
           onAddToShoppingList: () => _addFoodToShoppingList(sheetContext, food),
           onConsumeAmount: () {
             Navigator.pop(sheetContext);
@@ -248,12 +261,61 @@ class _FridgeScreenState extends State<FridgeScreen> {
     messenger.clearSnackBars();
     messenger.showSnackBar(
       SnackBar(
+        duration: _deletionSnackBarDuration,
+        persist: false,
         content: Text('${food.name} supprimé du stock'),
         action: SnackBarAction(
           label: 'Annuler',
           onPressed: () {
             widget.store.restoreFood(food, index: originalIndex);
           },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showMoveFoodSheet(FoodItem food) async {
+    final selectedLocation = await showModalBottomSheet<StorageLocation>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return _MoveFoodSheet(
+          food: food,
+          onSelected: (location) => Navigator.pop(sheetContext, location),
+        );
+      },
+    );
+
+    if (selectedLocation == null ||
+        selectedLocation == food.storageLocation ||
+        !mounted) {
+      return;
+    }
+
+    _updateFoodLocation(food, selectedLocation);
+  }
+
+  void _moveFoodTo(
+    BuildContext sheetContext,
+    FoodItem food,
+    StorageLocation location,
+  ) {
+    if (sheetContext.mounted) Navigator.pop(sheetContext);
+    _updateFoodLocation(food, location);
+  }
+
+  void _updateFoodLocation(FoodItem food, StorageLocation location) {
+    widget.store.updateFood(food.copyWith(storageLocation: location));
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
+      SnackBar(
+        duration: const Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        content: Text(
+          '${food.name} déplacé vers ${StorageLocationHelper.label(location)}',
         ),
       ),
     );
@@ -529,30 +591,94 @@ class _StorageFilterBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final colorScheme = Theme.of(context).colorScheme;
-    final locations = <StorageLocation?>[null, ...StorageLocation.values];
+    final locations = <StorageLocation?>[
+      null,
+      StorageLocation.fridge,
+      StorageLocation.pantry,
+      StorageLocation.freezer,
+      StorageLocation.spices,
+    ];
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
         children: [
           for (var index = 0; index < locations.length; index++) ...[
-            if (index > 0) const SizedBox(width: 8),
-            ChoiceChip(
-              selected: selectedLocation == locations[index],
-              onSelected: (_) => onSelected(locations[index]),
-              avatar: Icon(
-                locations[index] == null
-                    ? Icons.apps_rounded
-                    : StorageLocationHelper.icon(locations[index]!),
-                size: 18,
-                color: selectedLocation == locations[index]
-                    ? colorScheme.onPrimaryContainer
-                    : colorScheme.onSurfaceVariant,
-              ),
-              label: Text(
-                '${locations[index] == null ? 'Tout' : StorageLocationHelper.label(locations[index]!)} '
-                '(${_countFor(locations[index])})',
+            if (index > 0) const SizedBox(width: 10),
+            SizedBox(
+              width: locations[index] == StorageLocation.spices ? 116 : 128,
+              height: 112,
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => onSelected(locations[index]),
+                  borderRadius: BorderRadius.circular(18),
+                  child: Ink(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: selectedLocation == locations[index]
+                          ? colorScheme.primaryContainer.withValues(alpha: 0.72)
+                          : colorScheme.surface,
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(
+                        color: selectedLocation == locations[index]
+                            ? colorScheme.primary
+                            : colorScheme.outlineVariant.withValues(
+                                alpha: 0.55,
+                              ),
+                        width: selectedLocation == locations[index] ? 1.8 : 1,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: colorScheme.shadow.withValues(alpha: 0.05),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          locations[index] == null
+                              ? Icons.apps_rounded
+                              : StorageLocationHelper.icon(locations[index]!),
+                          size: locations[index] == StorageLocation.spices
+                              ? 23
+                              : 27,
+                          color: selectedLocation == locations[index]
+                              ? colorScheme.primary
+                              : colorScheme.onSurfaceVariant,
+                        ),
+                        const Spacer(),
+                        Text(
+                          locations[index] == null
+                              ? 'Tout'
+                              : StorageLocationHelper.label(locations[index]!),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            color: selectedLocation == locations[index]
+                                ? colorScheme.primary
+                                : colorScheme.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          '${_countFor(locations[index])} aliment'
+                          '${_countFor(locations[index]) > 1 ? 's' : ''}',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ),
           ],
@@ -922,6 +1048,8 @@ class _FoodDetailSheet extends StatelessWidget {
   const _FoodDetailSheet({
     required this.food,
     required this.onEdit,
+    required this.onMove,
+    required this.onMoveToFreezer,
     required this.onDelete,
     required this.onAddToShoppingList,
     required this.onConsumeAmount,
@@ -929,6 +1057,8 @@ class _FoodDetailSheet extends StatelessWidget {
 
   final FoodItem food;
   final VoidCallback onEdit;
+  final VoidCallback onMove;
+  final VoidCallback? onMoveToFreezer;
   final VoidCallback onDelete;
   final VoidCallback onAddToShoppingList;
   final VoidCallback onConsumeAmount;
@@ -1096,6 +1226,32 @@ class _FoodDetailSheet extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               OutlinedButton.icon(
+                onPressed: onMove,
+                icon: const Icon(Icons.drive_file_move_outline),
+                label: const Text('Déplacer'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+              ),
+              if (onMoveToFreezer != null) ...[
+                const SizedBox(height: 12),
+                FilledButton.tonalIcon(
+                  onPressed: onMoveToFreezer,
+                  icon: const Icon(Icons.ac_unit_rounded),
+                  label: const Text('Mettre au congélateur'),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
                 onPressed: onDelete,
                 icon: Icon(Icons.delete_outline, color: colorScheme.error),
                 label: Text(
@@ -1112,6 +1268,98 @@ class _FoodDetailSheet extends StatelessWidget {
                   ),
                 ),
               ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MoveFoodSheet extends StatelessWidget {
+  const _MoveFoodSheet({required this.food, required this.onSelected});
+
+  final FoodItem food;
+  final ValueChanged<StorageLocation> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final locations = [
+      StorageLocation.fridge,
+      StorageLocation.pantry,
+      StorageLocation.freezer,
+      StorageLocation.spices,
+    ];
+
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: colorScheme.outlineVariant,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Déplacer ${food.name}',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Choisis son nouvel emplacement. La date de péremption ne '
+                'sera pas modifiée.',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 18),
+              for (final location in locations)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Material(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(14),
+                    clipBehavior: Clip.antiAlias,
+                    child: ListTile(
+                      leading: Icon(StorageLocationHelper.icon(location)),
+                      title: Text(StorageLocationHelper.label(location)),
+                      trailing: food.storageLocation == location
+                          ? Icon(
+                              Icons.check_circle_rounded,
+                              color: colorScheme.primary,
+                            )
+                          : const Icon(Icons.chevron_right_rounded),
+                      enabled: food.storageLocation != location,
+                      tileColor: food.storageLocation == location
+                          ? colorScheme.primaryContainer.withValues(alpha: 0.4)
+                          : colorScheme.surfaceContainerHighest.withValues(
+                              alpha: 0.35,
+                            ),
+                      onTap: food.storageLocation == location
+                          ? null
+                          : () => onSelected(location),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),

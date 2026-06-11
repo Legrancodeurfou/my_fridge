@@ -14,6 +14,7 @@ class ShoppingListScreen extends StatelessWidget {
 
   final ShoppingListStore shoppingStore;
   final FridgeStore fridgeStore;
+  static const _deletionSnackBarDuration = Duration(seconds: 4);
 
   @override
   Widget build(BuildContext context) {
@@ -114,6 +115,8 @@ class ShoppingListScreen extends StatelessWidget {
     messenger.clearSnackBars();
     messenger.showSnackBar(
       SnackBar(
+        duration: _deletionSnackBarDuration,
+        persist: false,
         content: Text('${item.name} supprimé des courses'),
         action: SnackBarAction(
           label: 'Annuler',
