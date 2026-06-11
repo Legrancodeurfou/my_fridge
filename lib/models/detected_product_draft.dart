@@ -10,8 +10,9 @@ class DetectedProductDraft {
     this.quantity = 1,
     this.amount = 1,
     this.unit = 'unité',
-  })  : assert(quantity >= 1),
-        assert(amount > 0);
+    this.storageLocation = StorageLocation.fridge,
+  }) : assert(quantity >= 1),
+       assert(amount > 0);
 
   final String id;
   final String name;
@@ -26,6 +27,7 @@ class DetectedProductDraft {
   /// Quantité lisible pour l'utilisateur : 500 g, 20 cl, 2 tranches...
   final double amount;
   final String unit;
+  final StorageLocation storageLocation;
 
   String get emoji => FoodCategoryHelper.emoji(category);
   String get amountLabel => MeasurementHelper.label(amount, unit);
@@ -38,6 +40,7 @@ class DetectedProductDraft {
     int? quantity,
     double? amount,
     String? unit,
+    StorageLocation? storageLocation,
   }) {
     final nextAmount = amount ?? this.amount;
     final nextUnit = unit ?? this.unit;
@@ -48,9 +51,11 @@ class DetectedProductDraft {
       category: category ?? this.category,
       estimatedExpirationDate:
           estimatedExpirationDate ?? this.estimatedExpirationDate,
-      quantity: quantity ?? MeasurementHelper.logicalQuantity(nextAmount, nextUnit),
+      quantity:
+          quantity ?? MeasurementHelper.logicalQuantity(nextAmount, nextUnit),
       amount: nextAmount,
       unit: nextUnit,
+      storageLocation: storageLocation ?? this.storageLocation,
     );
   }
 
@@ -64,6 +69,7 @@ class DetectedProductDraft {
       quantity: quantity,
       amount: amount,
       unit: unit,
+      storageLocation: storageLocation,
     );
   }
 }

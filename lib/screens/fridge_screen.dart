@@ -1044,6 +1044,8 @@ class _EmptyFridgeView extends StatelessWidget {
   }
 }
 
+enum _FoodDetailAction { consume, addToShoppingList, moveToFreezer, delete }
+
 class _FoodDetailSheet extends StatelessWidget {
   const _FoodDetailSheet({
     required this.food,
@@ -1166,18 +1168,6 @@ class _FoodDetailSheet extends StatelessWidget {
               ),
               const SizedBox(height: 24),
               _DetailRow(
-                icon: Icons.category_outlined,
-                label: 'Catégorie',
-                value: FoodCategoryHelper.label(food.category),
-              ),
-              const SizedBox(height: 12),
-              _DetailRow(
-                icon: StorageLocationHelper.icon(food.storageLocation),
-                label: 'Emplacement',
-                value: StorageLocationHelper.label(food.storageLocation),
-              ),
-              const SizedBox(height: 12),
-              _DetailRow(
                 icon: Icons.inventory_2_outlined,
                 label: 'Quantité',
                 value: food.amountLabel,
@@ -1189,82 +1179,111 @@ class _FoodDetailSheet extends StatelessWidget {
                 value: _formatExpiryDate(food.expiryDate),
               ),
               const SizedBox(height: 28),
-              FilledButton.icon(
-                onPressed: onConsumeAmount,
-                icon: const Icon(Icons.restaurant_rounded),
-                label: const Text('Consommer une partie'),
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: onAddToShoppingList,
-                icon: const Icon(Icons.add_shopping_cart_rounded),
-                label: const Text('Ajouter à ma liste de courses'),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: onEdit,
-                icon: const Icon(Icons.edit_outlined),
-                label: const Text('Modifier'),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: onMove,
-                icon: const Icon(Icons.drive_file_move_outline),
-                label: const Text('Déplacer'),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-              ),
-              if (onMoveToFreezer != null) ...[
-                const SizedBox(height: 12),
-                FilledButton.tonalIcon(
-                  onPressed: onMoveToFreezer,
-                  icon: const Icon(Icons.ac_unit_rounded),
-                  label: const Text('Mettre au congélateur'),
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: onEdit,
+                      icon: const Icon(Icons.edit_outlined),
+                      label: const Text('Modifier'),
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ],
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: onDelete,
-                icon: Icon(Icons.delete_outline, color: colorScheme.error),
-                label: Text(
-                  'Supprimer',
-                  style: TextStyle(color: colorScheme.error),
-                ),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  side: BorderSide(
-                    color: colorScheme.error.withValues(alpha: 0.5),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: onMove,
+                      icon: const Icon(Icons.drive_file_move_outline),
+                      label: const Text('Déplacer'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                    ),
                   ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
+                ],
+              ),
+              const SizedBox(height: 8),
+              PopupMenuButton<_FoodDetailAction>(
+                tooltip: 'Afficher plus d’actions',
+                onSelected: (action) {
+                  switch (action) {
+                    case _FoodDetailAction.consume:
+                      onConsumeAmount();
+                    case _FoodDetailAction.addToShoppingList:
+                      onAddToShoppingList();
+                    case _FoodDetailAction.moveToFreezer:
+                      onMoveToFreezer?.call();
+                    case _FoodDetailAction.delete:
+                      onDelete();
+                  }
+                },
+                itemBuilder: (context) => [
+                  const PopupMenuItem(
+                    value: _FoodDetailAction.consume,
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.restaurant_rounded),
+                      title: Text('Consommer une partie'),
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: _FoodDetailAction.addToShoppingList,
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.add_shopping_cart_rounded),
+                      title: Text('Ajouter aux courses'),
+                    ),
+                  ),
+                  if (onMoveToFreezer != null)
+                    const PopupMenuItem(
+                      value: _FoodDetailAction.moveToFreezer,
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.ac_unit_rounded),
+                        title: Text('Mettre au congélateur'),
+                      ),
+                    ),
+                  PopupMenuItem(
+                    value: _FoodDetailAction.delete,
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(
+                        Icons.delete_outline_rounded,
+                        color: colorScheme.error,
+                      ),
+                      title: Text(
+                        'Supprimer',
+                        style: TextStyle(color: colorScheme.error),
+                      ),
+                    ),
+                  ),
+                ],
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.more_horiz_rounded,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Plus d’actions',
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),

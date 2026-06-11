@@ -1238,7 +1238,7 @@ class _ScanValidationSheet extends StatefulWidget {
 
 class _ScanValidationSheetState extends State<_ScanValidationSheet> {
   late List<DetectedProductDraft> _items;
-  StorageLocation _storageLocation = StorageLocation.fridge;
+  StorageLocation _bulkStorageLocation = StorageLocation.fridge;
 
   @override
   void initState() {
@@ -1286,6 +1286,23 @@ class _ScanValidationSheetState extends State<_ScanValidationSheet> {
           unit: unit,
         );
       }).toList();
+    });
+  }
+
+  void _changeStorageLocation(String id, StorageLocation storageLocation) {
+    setState(() {
+      _items = _items.map((draft) {
+        if (draft.id != id) return draft;
+        return draft.copyWith(storageLocation: storageLocation);
+      }).toList();
+    });
+  }
+
+  void _applyStorageLocationToAll() {
+    setState(() {
+      _items = _items
+          .map((draft) => draft.copyWith(storageLocation: _bulkStorageLocation))
+          .toList();
     });
   }
 
@@ -1338,6 +1355,7 @@ class _ScanValidationSheetState extends State<_ScanValidationSheet> {
                 quantity: food.quantity,
                 amount: food.amount,
                 unit: food.unit,
+                storageLocation: food.storageLocation,
               );
 
               setState(() => _items = [..._items, draft]);
@@ -1350,12 +1368,7 @@ class _ScanValidationSheetState extends State<_ScanValidationSheet> {
   }
 
   List<FoodItem> _foodsForFridge() {
-    return _items
-        .map(
-          (draft) =>
-              draft.toFoodItem().copyWith(storageLocation: _storageLocation),
-        )
-        .toList();
+    return _items.map((draft) => draft.toFoodItem()).toList();
   }
 
   int get _totalLines => _items.length;
@@ -1443,23 +1456,61 @@ class _ScanValidationSheetState extends State<_ScanValidationSheet> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  DropdownButtonFormField<StorageLocation>(
-                    initialValue: _storageLocation,
-                    decoration: InputDecoration(
-                      labelText: 'Emplacement pour ces produits',
-                      prefixIcon: Icon(
-                        StorageLocationHelper.icon(_storageLocation),
-                      ),
+                  Text(
+                    'Chaque produit conserve l’emplacement conseillé par '
+                    'l’analyse. Tu peux le corriger sur sa ligne.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
                     ),
-                    items: StorageLocation.values.map((location) {
-                      return DropdownMenuItem(
-                        value: location,
-                        child: Text(StorageLocationHelper.label(location)),
+                  ),
+                  const SizedBox(height: 8),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final dropdown = DropdownButtonFormField<StorageLocation>(
+                        initialValue: _bulkStorageLocation,
+                        decoration: InputDecoration(
+                          labelText: 'Emplacement global',
+                          prefixIcon: Icon(
+                            StorageLocationHelper.icon(_bulkStorageLocation),
+                          ),
+                        ),
+                        items: StorageLocation.values.map((location) {
+                          return DropdownMenuItem(
+                            value: location,
+                            child: Text(StorageLocationHelper.label(location)),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          if (value == null) return;
+                          setState(() => _bulkStorageLocation = value);
+                        },
                       );
-                    }).toList(),
-                    onChanged: (value) {
-                      if (value == null) return;
-                      setState(() => _storageLocation = value);
+                      final applyButton = OutlinedButton.icon(
+                        onPressed: _items.isEmpty
+                            ? null
+                            : _applyStorageLocationToAll,
+                        icon: const Icon(Icons.done_all_rounded),
+                        label: const Text('Appliquer à tous'),
+                      );
+
+                      if (constraints.maxWidth < 430) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            dropdown,
+                            const SizedBox(height: 8),
+                            applyButton,
+                          ],
+                        );
+                      }
+
+                      return Row(
+                        children: [
+                          Expanded(child: dropdown),
+                          const SizedBox(width: 10),
+                          applyButton,
+                        ],
+                      );
                     },
                   ),
                   if (widget.usedFallback) ...[
@@ -1511,6 +1562,8 @@ class _ScanValidationSheetState extends State<_ScanValidationSheet> {
                     onIncrement: () => _incrementQuantity(draft.id),
                     onDecrement: () => _decrementQuantity(draft.id),
                     onUnitChanged: (unit) => _changeUnit(draft.id, unit),
+                    onStorageLocationChanged: (storageLocation) =>
+                        _changeStorageLocation(draft.id, storageLocation),
                     onExpiryDateChanged: () => _changeExpiryDate(draft),
                     onRemove: () => _removeItem(draft.id),
                   );
@@ -1603,6 +1656,7 @@ class _DetectedProductTile extends StatelessWidget {
     required this.onIncrement,
     required this.onDecrement,
     required this.onUnitChanged,
+    required this.onStorageLocationChanged,
     required this.onExpiryDateChanged,
     required this.onRemove,
   });
@@ -1611,6 +1665,7 @@ class _DetectedProductTile extends StatelessWidget {
   final VoidCallback onIncrement;
   final VoidCallback onDecrement;
   final ValueChanged<String> onUnitChanged;
+  final ValueChanged<StorageLocation> onStorageLocationChanged;
   final VoidCallback onExpiryDateChanged;
   final VoidCallback onRemove;
 
@@ -1655,6 +1710,61 @@ class _DetectedProductTile extends StatelessWidget {
                   padding: EdgeInsets.zero,
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   textStyle: theme.textTheme.bodySmall,
+                ),
+              ),
+              const SizedBox(height: 2),
+              PopupMenuButton<StorageLocation>(
+                initialValue: draft.storageLocation,
+                tooltip: 'Modifier l’emplacement',
+                onSelected: onStorageLocationChanged,
+                itemBuilder: (context) {
+                  return StorageLocation.values.map((location) {
+                    return PopupMenuItem<StorageLocation>(
+                      value: location,
+                      child: Row(
+                        children: [
+                          Icon(StorageLocationHelper.icon(location), size: 18),
+                          const SizedBox(width: 8),
+                          Text(StorageLocationHelper.label(location)),
+                        ],
+                      ),
+                    );
+                  }).toList();
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 7,
+                  ),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primaryContainer.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        StorageLocationHelper.icon(draft.storageLocation),
+                        size: 16,
+                        color: colorScheme.primary,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Emplacement : '
+                        '${StorageLocationHelper.label(draft.storageLocation)}',
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: colorScheme.primary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      Icon(
+                        Icons.arrow_drop_down_rounded,
+                        size: 18,
+                        color: colorScheme.primary,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],

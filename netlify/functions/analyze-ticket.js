@@ -29,12 +29,14 @@ Format exact attendu :
     "amount": 1,
     "unit": "unité",
     "category": "other",
-    "estimatedShelfLifeDays": 30
+    "estimatedShelfLifeDays": 30,
+    "storageLocation": "fridge"
   }
 ]
 
 Unités autorisées uniquement : "g", "kg", "ml", "cl", "l", "unité", "tranche".
 Catégories autorisées uniquement : "dairy", "produce", "meat", "other".
+Emplacements autorisés uniquement : "fridge", "pantry", "freezer", "spices".
 
 Règles très importantes :
 - Une quantité n'est valide que si elle est explicitement liée à la désignation du produit sur la même ligne ou dans son libellé : par exemple "500 g", "1 L", "x6" ou "6 tranches".
@@ -59,6 +61,15 @@ Règles de lecture du nom produit :
 - "Leerdammer" et les marques ou mentions clairement associées au fromage doivent rester classées comme fromage, catégorie "dairy", même si une abréviation voisine semble évoquer du beurre.
 - Exemple : si "LEERDAMMER", "FROMAGE" ou une marque de fromage est visible avec "200 g", retourne un nom de fromage et 200 g ; ne retourne pas "Beurre".
 - Si seule une désignation ambiguë comme "200G BTR ORIGINAL" est lisible et qu'aucune identité produit fiable n'est visible, conserve un nom proche de "BTR Original" au lieu d'inventer "Beurre".
+
+Règles d'emplacement conseillé :
+- "freezer" : glace, crème glacée, produit surgelé, mention "frozen" ou bac de glace.
+- "pantry" : pâtes, riz, farine, sucre, conserves, biscuits, chips, pains au chocolat et céréales.
+- "fridge" : jambon, viande, poisson, lait, yaourt, fromage, beurre, crème et salade fraîche.
+- "spices" : sel, poivre, paprika, curry, herbes, épices et bouillon.
+- Choisis l'emplacement produit par produit.
+- Si le produit ou son mode de conservation est ambigu, utilise "fridge" par prudence.
+- N'invente jamais un emplacement à partir du rayon, du prix, de la TVA ou d'un chiffre du ticket.
 
 Exemples positifs :
 - Exemple : "Jambon 6 tranches" visible => quantity = 6, amount = 6, unit = "tranche".
@@ -281,6 +292,7 @@ function normalizeProduct(raw, today) {
   }
 
   const category = normalizeCategory(raw.category);
+  const storageLocation = normalizeStorageLocation(raw.storageLocation, name);
   const shelfLifeDays = normalizeShelfLifeDays(
     raw.estimatedShelfLifeDays,
     category,
@@ -296,6 +308,7 @@ function normalizeProduct(raw, today) {
     amount,
     unit,
     category,
+    storageLocation,
     estimatedExpirationDate: expirationDate.toISOString(),
   };
 }
@@ -358,6 +371,44 @@ function normalizeCategory(value) {
   return allowed.has(raw) ? raw : 'other';
 }
 
+function normalizeStorageLocation(value, productName = '') {
+  const name = normalizeStorageText(productName);
+
+  const rules = [
+    {
+      location: 'freezer',
+      pattern: /\b(glaces?|cremes? glacees?|surgele(?:e|s|es)?|frozen|bac de glace)\b/,
+    },
+    {
+      location: 'pantry',
+      pattern: /\b(pates?|riz|farine|sucre|conserves?|biscuits?|chips|pains? au chocolat|cereales?)\b/,
+    },
+    {
+      location: 'spices',
+      pattern: /\b(sel|poivre|paprika|curry|herbes?|epices?|bouillons?)\b/,
+    },
+    {
+      location: 'fridge',
+      pattern: /\b(jambon|viandes?|poissons?|lait|yaourts?|fromages?|beurre|creme|salade fraiche)\b/,
+    },
+  ];
+
+  for (const rule of rules) {
+    if (rule.pattern.test(name)) return rule.location;
+  }
+
+  const normalizedValue = cleanString(value).toLowerCase();
+  const allowed = new Set(['fridge', 'pantry', 'freezer', 'spices']);
+  return allowed.has(normalizedValue) ? normalizedValue : 'fridge';
+}
+
+function normalizeStorageText(value) {
+  return cleanString(value)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
 function jsonResponse(statusCode, body) {
   return {
     statusCode,
@@ -369,3 +420,5 @@ function jsonResponse(statusCode, body) {
     body: JSON.stringify(body),
   };
 }
+
+exports.normalizeStorageLocation = normalizeStorageLocation;

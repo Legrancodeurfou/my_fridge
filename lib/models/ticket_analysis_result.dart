@@ -10,6 +10,7 @@ class TicketRawProduct {
     required this.unit,
     required this.category,
     required this.estimatedExpirationDate,
+    required this.storageLocation,
   });
 
   final String name;
@@ -23,6 +24,7 @@ class TicketRawProduct {
 
   final FoodCategory category;
   final DateTime estimatedExpirationDate;
+  final StorageLocation storageLocation;
 
   factory TicketRawProduct.fromJson(Map<String, dynamic> json) {
     final rawQuantity = json['quantity'];
@@ -44,6 +46,10 @@ class TicketRawProduct {
     final categoryKey = json['category'] as String? ?? 'other';
     final category =
         FoodCategory.values.asNameMap()[categoryKey] ?? FoodCategory.other;
+    final rawStorageLocation = json['storageLocation'];
+    final storageLocation = StorageLocationHelper.fromName(
+      rawStorageLocation is String ? rawStorageLocation : null,
+    );
 
     final dateValue = json['estimatedExpirationDate'] ?? json['expiryDate'];
     final parsedDate = switch (dateValue) {
@@ -61,6 +67,7 @@ class TicketRawProduct {
       unit: unit,
       category: category,
       estimatedExpirationDate: _dateOnly(parsedDate),
+      storageLocation: storageLocation,
     );
   }
 
@@ -73,6 +80,7 @@ class TicketRawProduct {
       unit: unit,
       category: category,
       estimatedExpirationDate: estimatedExpirationDate,
+      storageLocation: storageLocation,
     );
   }
 
@@ -105,9 +113,6 @@ class TicketAnalysisResult {
         rawProducts[i].toDraft(id: '${idPrefix}_$i'),
     ];
 
-    return TicketAnalysisResult(
-      rawProducts: rawProducts,
-      products: products,
-    );
+    return TicketAnalysisResult(rawProducts: rawProducts, products: products);
   }
 }
