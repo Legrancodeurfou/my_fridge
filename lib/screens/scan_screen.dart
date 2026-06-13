@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../data/fridge_store.dart';
+import '../data/profile_store.dart';
 import '../data/scan_history_store.dart';
 import '../models/detected_product_draft.dart';
 import '../models/food.dart';
@@ -14,11 +15,13 @@ class ScanScreen extends StatefulWidget {
   const ScanScreen({
     super.key,
     required this.store,
+    required this.profileStore,
     required this.historyStore,
     required this.onNavigateToFridge,
   });
 
   final FridgeStore store;
+  final ProfileStore profileStore;
   final ScanHistoryStore historyStore;
   final VoidCallback onNavigateToFridge;
 
@@ -36,6 +39,33 @@ class _ScanScreenState extends State<ScanScreen> {
 
   Uint8List? _pickedImageBytes;
   bool _isScanning = false;
+
+  Future<void> _dismissScanInfo() async {
+    await widget.profileStore.markScanInfoSeen();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _showScanInfo() {
+    return showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('À propos du scan IA'),
+          content: const Text(
+            'L’image du ticket est envoyée à un service d’analyse IA pour '
+            'détecter les produits. Rien n’est ajouté au stock sans ta '
+            'validation.',
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('J’ai compris'),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
   Future<void> _showImageSourceSheet() async {
     if (_isScanning) return;
@@ -484,49 +514,71 @@ class _ScanScreenState extends State<ScanScreen> {
             ),
           ),
           const SizedBox(height: 20),
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: colorScheme.primaryContainer.withValues(alpha: 0.35),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(
-                  Icons.info_outline_rounded,
-                  size: 20,
-                  color: colorScheme.primary,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text.rich(
-                    TextSpan(
-                      children: [
-                        TextSpan(
-                          text: 'À savoir\n',
-                          style: theme.textTheme.labelLarge?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            color: colorScheme.onPrimaryContainer,
+          if (!widget.profileStore.scanInfoSeen)
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: colorScheme.primaryContainer.withValues(alpha: 0.35),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.info_outline_rounded,
+                        size: 20,
+                        color: colorScheme.primary,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text.rich(
+                          TextSpan(
+                            children: [
+                              TextSpan(
+                                text: 'À savoir\n',
+                                style: theme.textTheme.labelLarge?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                  color: colorScheme.onPrimaryContainer,
+                                ),
+                              ),
+                              TextSpan(
+                                text:
+                                    'L’image du ticket est envoyée à un '
+                                    'service d’analyse IA pour détecter les '
+                                    'produits. Rien n’est ajouté au stock '
+                                    'sans ta validation.',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: colorScheme.onPrimaryContainer,
+                                  height: 1.35,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        TextSpan(
-                          text:
-                              'L’image du ticket est envoyée à un service '
-                              'd’analyse IA pour détecter les produits. Rien '
-                              'n’est ajouté au stock sans ta validation.',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: colorScheme.onPrimaryContainer,
-                            height: 1.35,
-                          ),
-                        ),
-                      ],
+                      ),
+                    ],
+                  ),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: _dismissScanInfo,
+                      child: const Text('J’ai compris'),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
+            )
+          else
+            Align(
+              alignment: Alignment.center,
+              child: TextButton.icon(
+                onPressed: _showScanInfo,
+                icon: const Icon(Icons.info_outline_rounded, size: 18),
+                label: const Text('À propos du scan IA'),
+              ),
             ),
-          ),
           const SizedBox(height: 24),
           FilledButton.icon(
             onPressed: _isScanning ? null : _showImageSourceSheet,
@@ -860,7 +912,7 @@ class _RecentScansSection extends StatelessWidget {
     messenger.clearSnackBars();
     messenger.showSnackBar(
       SnackBar(
-        duration: const Duration(seconds: 4),
+        duration: const Duration(seconds: 2),
         persist: false,
         content: const Text('Scan supprimé de l’historique'),
         action: SnackBarAction(

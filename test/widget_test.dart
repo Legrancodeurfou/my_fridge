@@ -41,12 +41,19 @@ void main() {
     expect(find.text('Placard'), findsOneWidget);
     expect(find.text('Congélateur'), findsOneWidget);
     expect(find.text('Épices'), findsOneWidget);
+
+    await tester.dragUntilVisible(
+      find.text('Scanner un ticket'),
+      find.byType(ListView).last,
+      const Offset(0, -300),
+    );
+
     expect(find.text('Scanner un ticket'), findsOneWidget);
 
-    await tester.scrollUntilVisible(
+    await tester.dragUntilVisible(
       find.text('Photo du frigo'),
-      300,
-      scrollable: find.byType(Scrollable).last,
+      find.byType(ListView).last,
+      const Offset(0, -300),
     );
 
     expect(find.text('Photo du frigo'), findsOneWidget);

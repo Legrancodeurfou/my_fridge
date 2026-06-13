@@ -807,7 +807,7 @@ class _ExpiringFoodTile extends StatelessWidget {
             child: Icon(
               FoodCategoryHelper.icon(food.category),
               size: 22,
-              color: urgencyColor,
+              color: colorScheme.primary,
             ),
           ),
           const SizedBox(width: 12),

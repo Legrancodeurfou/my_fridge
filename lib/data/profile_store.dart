@@ -80,7 +80,7 @@ class ProfileData {
   }
 
   static const defaults = ProfileData(
-    name: 'Esteban',
+    name: '',
     cookingLevel: CookingLevel.intermediate,
     goal: ProfileGoal.reduceWaste,
     hasAirfryer: false,
@@ -95,6 +95,7 @@ class ProfileStore extends ChangeNotifier {
     this._profile,
     this._expiryRemindersEnabled,
     this._lastAppOpenedAt,
+    this._scanInfoSeen,
   );
 
   static const _nameKey = 'profile_name';
@@ -106,14 +107,17 @@ class ProfileStore extends ChangeNotifier {
   static const _thermomixKey = 'profile_thermomix';
   static const _expiryRemindersEnabledKey = 'profile_expiry_reminders_enabled';
   static const _lastAppOpenedAtKey = 'profile_last_app_opened_at';
+  static const _scanInfoSeenKey = 'profile_scan_info_seen';
 
   ProfileData _profile;
   bool _expiryRemindersEnabled;
   DateTime? _lastAppOpenedAt;
+  bool _scanInfoSeen;
 
   ProfileData get profile => _profile;
   bool get expiryRemindersEnabled => _expiryRemindersEnabled;
   DateTime? get lastAppOpenedAt => _lastAppOpenedAt;
+  bool get scanInfoSeen => _scanInfoSeen;
 
   static Future<ProfileStore> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -127,15 +131,17 @@ class ProfileStore extends ChangeNotifier {
         goal: ProfileGoalLabel.fromLabel(
           prefs.getString(_goalKey) ?? ProfileData.defaults.goal.label,
         ),
-        hasAirfryer: prefs.getBool(_airfryerKey) ?? ProfileData.defaults.hasAirfryer,
+        hasAirfryer:
+            prefs.getBool(_airfryerKey) ?? ProfileData.defaults.hasAirfryer,
         hasOven: prefs.getBool(_ovenKey) ?? ProfileData.defaults.hasOven,
-        hasMicrowave: prefs.getBool(_microwaveKey) ?? ProfileData.defaults.hasMicrowave,
-        hasThermomix: prefs.getBool(_thermomixKey) ?? ProfileData.defaults.hasThermomix,
+        hasMicrowave:
+            prefs.getBool(_microwaveKey) ?? ProfileData.defaults.hasMicrowave,
+        hasThermomix:
+            prefs.getBool(_thermomixKey) ?? ProfileData.defaults.hasThermomix,
       ),
       prefs.getBool(_expiryRemindersEnabledKey) ?? false,
-      DateTime.tryParse(
-        prefs.getString(_lastAppOpenedAtKey) ?? '',
-      ),
+      DateTime.tryParse(prefs.getString(_lastAppOpenedAtKey) ?? ''),
+      prefs.getBool(_scanInfoSeenKey) ?? false,
     );
 
     await store.recordAppOpened();
@@ -158,11 +164,41 @@ class ProfileStore extends ChangeNotifier {
     );
   }
 
-  Future<void> updateName(String value) async {
-    _profile = _profile.copyWith(name: value.trim().isEmpty ? 'Esteban' : value.trim());
+  Future<bool> updateName(String value) async {
+    final normalized = value.trim();
+    if (normalized.isEmpty) return false;
+
+    _profile = _profile.copyWith(name: normalized);
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_nameKey, _profile.name);
+    return true;
+  }
+
+  Future<bool> updateNameIfEmpty(String? value) async {
+    if (_profile.name.trim().isNotEmpty) return false;
+    return updateName(value ?? '');
+  }
+
+  Future<bool> updateNameFromAuthIfNeeded(String? value) async {
+    final currentName = _profile.name.trim();
+    final suggestedName = value?.trim() ?? '';
+    if (suggestedName.isEmpty) return false;
+
+    final isLegacyDefault =
+        currentName.toLowerCase() == 'esteban' &&
+        suggestedName.toLowerCase() != 'esteban';
+    if (currentName.isNotEmpty && !isLegacyDefault) return false;
+
+    return updateName(suggestedName);
+  }
+
+  Future<void> markScanInfoSeen() async {
+    if (_scanInfoSeen) return;
+    _scanInfoSeen = true;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_scanInfoSeenKey, true);
   }
 
   Future<void> updateCookingLevel(CookingLevel value) async {

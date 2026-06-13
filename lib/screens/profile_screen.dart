@@ -30,7 +30,7 @@ class ProfileScreen extends StatefulWidget {
     required this.recipeNotesStore,
     required this.authService,
     required this.onCloudRestoreStateChanged,
-    required this.onResetDemoData,
+    required this.onClearLocalData,
   });
 
   final ProfileStore store;
@@ -41,7 +41,7 @@ class ProfileScreen extends StatefulWidget {
   final RecipeNotesStore recipeNotesStore;
   final AuthService authService;
   final Future<void> Function(bool isRestoring) onCloudRestoreStateChanged;
-  final Future<void> Function() onResetDemoData;
+  final Future<void> Function() onClearLocalData;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -58,6 +58,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String? _loadedBackupUserId;
   String? _cloudOnboardingUserId;
   String? _backupError;
+  String? _nameError;
   List<CloudBackup> _cloudBackups = const [];
   int _backupLoadGeneration = 0;
 
@@ -70,7 +71,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.store.profile.name);
-    _nameController.addListener(_onNameChanged);
     widget.authService.addListener(_onAuthStateChanged);
     _onAuthStateChanged();
   }
@@ -78,22 +78,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void dispose() {
     widget.authService.removeListener(_onAuthStateChanged);
-    _nameController
-      ..removeListener(_onNameChanged)
-      ..dispose();
+    _nameController.dispose();
     super.dispose();
   }
 
-  void _onNameChanged() {
-    widget.store.updateName(_nameController.text);
+  Future<void> _saveName() async {
+    final value = _nameController.text.trim();
+    if (value.isEmpty) {
+      setState(() {
+        _nameError = 'Indique un prénom ou un nom avant d’enregistrer.';
+      });
+      return;
+    }
+
+    final saved = await widget.store.updateName(value);
+    if (!mounted || !saved) return;
+
+    setState(() => _nameError = null);
+    FocusScope.of(context).unfocus();
+    _showSnackBar('Nom mis à jour.');
   }
 
   void _onAuthStateChanged() {
     final userId = widget.authService.userId;
+    final suggestedName =
+        widget.authService.displayName ??
+        (widget.authService.isSignedIn ? 'Utilisateur' : null);
+
+    if (_nameController.text.trim().isEmpty && suggestedName != null) {
+      _nameController.text = suggestedName;
+      unawaited(widget.store.updateNameFromAuthIfNeeded(suggestedName));
+    }
 
     if (userId == null) {
       _cloudOnboardingUserId = null;
-    } else if (widget.authService.isCloudOnboardingPending &&
+    } else if (widget.authService.shouldShowCloudOnboarding &&
         _cloudOnboardingUserId != userId) {
       _cloudOnboardingUserId = userId;
       unawaited(_showCloudOnboarding(userId));
@@ -143,10 +162,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             actions: [
               TextButton(
-                onPressed: () => Navigator.pop(
-                  dialogContext,
-                  _CloudOnboardingChoice.later,
-                ),
+                onPressed: () =>
+                    Navigator.pop(dialogContext, _CloudOnboardingChoice.later),
                 child: const Text('Plus tard'),
               ),
               TextButton(
@@ -175,6 +192,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           manageAutoSyncSuspension: false,
         );
       } else if (choice == _CloudOnboardingChoice.later && mounted) {
+        await widget.authService.dismissCloudOnboardingPrompt();
         _showSnackBar(
           'Synchronisation suspendue. Tu pourras reprendre ce choix depuis '
           'la carte « État du cloud ».',
@@ -190,9 +208,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
     } finally {
       await widget.onCloudRestoreStateChanged(false);
-      if (shouldCompleteOnboarding &&
-          widget.authService.userId == userId) {
-        widget.authService.completeCloudOnboarding();
+      if (shouldCompleteOnboarding && widget.authService.userId == userId) {
+        await widget.authService.completeCloudOnboarding();
       }
       _isCloudOnboardingInProgress = false;
       if (mounted) setState(() {});
@@ -243,7 +260,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           content: const Text(
             'Connexion Google impossible pour le moment. Réessaie dans '
             'quelques instants.',
@@ -264,7 +283,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
-
 
   Future<void> _uploadFridgeToCloud() async {
     if (!widget.authService.isSignedIn) {
@@ -607,14 +625,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
     debugPrint('$operation impossible : $error');
   }
 
-  Future<void> _confirmResetDemoData() async {
+  Future<void> _confirmClearLocalData() async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          title: const Text('Réinitialiser les données ?'),
+          title: const Text('Vider les données locales ?'),
           content: const Text(
-            'Le frigo reviendra aux aliments de démo. La liste de courses et l’historique des scans seront vidés. Ton profil sera conservé.',
+            'Le stock, les courses, l’historique des scans, les favoris et les '
+            'notes de recettes seront supprimés sur cet appareil.\n\n'
+            'Ton profil, ta connexion et tes sauvegardes cloud seront '
+            'conservés. Les données cloud ne seront pas supprimées.',
           ),
           actions: [
             TextButton(
@@ -623,7 +644,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             FilledButton(
               onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('Réinitialiser'),
+              child: const Text('Vider mes données locales'),
             ),
           ],
         );
@@ -632,14 +653,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     if (confirmed != true || !mounted) return;
 
-    await widget.onResetDemoData();
+    await widget.onClearLocalData();
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        content: const Text('Données de démo réinitialisées'),
+        content: const Text(
+          'Données locales vidées. Tu peux maintenant repartir à zéro.',
+        ),
       ),
     );
   }
@@ -659,13 +682,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             .where((food) => ExpiryHelper.isUrgentForReminder(food.expiryDate))
             .length;
 
-        if (_nameController.text != profile.name) {
-          _nameController.text = profile.name;
-          _nameController.selection = TextSelection.fromPosition(
-            TextPosition(offset: _nameController.text.length),
-          );
-        }
-
         return Scaffold(
           backgroundColor: colorScheme.surfaceContainerLowest,
           appBar: AppBar(
@@ -678,7 +694,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
           body: ListView(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
             children: [
-              _HeaderCard(nameController: _nameController),
+              _HeaderCard(
+                nameController: _nameController,
+                errorText: _nameError,
+                onSave: _saveName,
+              ),
               const SizedBox(height: 16),
               const _SectionTitle(title: 'Compte'),
               const SizedBox(height: 8),
@@ -809,11 +829,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     'l’application reste utilisable en mode local.',
               ),
               const SizedBox(height: 24),
-              const _SectionTitle(title: 'Données de test'),
+              const _SectionTitle(title: 'Données locales'),
               const SizedBox(height: 8),
               _ResetDataCard(
                 isDisabled: _isCloudOperationInProgress,
-                onReset: _confirmResetDemoData,
+                onReset: _confirmClearLocalData,
               ),
               const SizedBox(height: 24),
               const _InfoCard(
@@ -830,9 +850,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
 }
 
 class _HeaderCard extends StatelessWidget {
-  const _HeaderCard({required this.nameController});
+  const _HeaderCard({
+    required this.nameController,
+    required this.errorText,
+    required this.onSave,
+  });
 
   final TextEditingController nameController;
+  final String? errorText;
+  final VoidCallback onSave;
 
   @override
   Widget build(BuildContext context) {
@@ -856,24 +882,46 @@ class _HeaderCard extends StatelessWidget {
         children: [
           CircleAvatar(
             radius: 48,
-            backgroundColor: colorScheme.primaryContainer.withValues(alpha: 0.65),
-            child: Icon(Icons.person_rounded, size: 52, color: colorScheme.primary),
+            backgroundColor: colorScheme.primaryContainer.withValues(
+              alpha: 0.65,
+            ),
+            child: Icon(
+              Icons.person_rounded,
+              size: 52,
+              color: colorScheme.primary,
+            ),
           ),
           const SizedBox(height: 18),
           TextField(
             controller: nameController,
             textAlign: TextAlign.center,
-            style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => onSave(),
+            style: theme.textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
             decoration: InputDecoration(
               hintText: 'Ton prénom',
+              errorText: errorText,
               filled: true,
-              fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+              fillColor: colorScheme.surfaceContainerHighest.withValues(
+                alpha: 0.35,
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
                 borderSide: BorderSide.none,
               ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 14,
+              ),
             ),
+          ),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            onPressed: onSave,
+            icon: const Icon(Icons.check_rounded),
+            label: const Text('Enregistrer mon nom'),
           ),
         ],
       ),
@@ -890,7 +938,9 @@ class _SectionTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       title,
-      style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+      style: Theme.of(
+        context,
+      ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
     );
   }
 }
@@ -922,7 +972,10 @@ class _DropdownCard<T> extends StatelessWidget {
           Icon(icon, color: colorScheme.primary),
           const SizedBox(width: 14),
           Expanded(
-            child: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+            child: Text(
+              title,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
           ),
           DropdownButtonHideUnderline(
             child: DropdownButton<T>(
@@ -1084,7 +1137,10 @@ class _AuthCard extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.cloud_off_rounded, color: colorScheme.onSurfaceVariant),
+              Icon(
+                Icons.cloud_off_rounded,
+                color: colorScheme.onSurfaceVariant,
+              ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
@@ -1150,7 +1206,9 @@ class _AuthCard extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
-                  onPressed: authService.isBusy || isDisabled ? null : onSignOut,
+                  onPressed: authService.isBusy || isDisabled
+                      ? null
+                      : onSignOut,
                   icon: const Icon(Icons.logout_rounded),
                   label: const Text('Se déconnecter'),
                 ),
@@ -1245,8 +1303,7 @@ class _CloudStatusCard extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isCloudActive = authService.isAvailable && authService.isSignedIn;
-    final isSyncSuspended =
-        isRestoring || authService.isCloudOnboardingPending;
+    final isSyncSuspended = isRestoring || authService.isCloudOnboardingPending;
 
     final statusMessage = !isCloudActive
         ? 'Mode local uniquement'
@@ -1326,8 +1383,9 @@ class _CloudStatusCard extends StatelessWidget {
                             ? const SizedBox(
                                 width: 18,
                                 height: 18,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
                             : const Icon(Icons.sync_alt_rounded),
                         label: Text(
@@ -1458,7 +1516,6 @@ class _CloudSyncCard extends StatelessWidget {
     );
   }
 }
-
 
 class _CloudRestoreCard extends StatelessWidget {
   const _CloudRestoreCard({
@@ -1775,10 +1832,7 @@ class _CloudBackupTile extends StatelessWidget {
 }
 
 class _ResetDataCard extends StatelessWidget {
-  const _ResetDataCard({
-    required this.isDisabled,
-    required this.onReset,
-  });
+  const _ResetDataCard({required this.isDisabled, required this.onReset});
 
   final bool isDisabled;
   final VoidCallback onReset;
@@ -1804,14 +1858,15 @@ class _ResetDataCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Réinitialiser l’app',
+                        'Repartir à zéro',
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w800,
                         ),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Remet le frigo de démo, vide les courses et l’historique. Le profil est conservé.',
+                        'Vide les données de cet appareil sans supprimer ton '
+                        'profil ni tes sauvegardes cloud.',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: colorScheme.onSurfaceVariant,
                         ),
@@ -1826,8 +1881,8 @@ class _ResetDataCard extends StatelessWidget {
               width: double.infinity,
               child: OutlinedButton.icon(
                 onPressed: isDisabled ? null : onReset,
-                icon: const Icon(Icons.refresh_rounded),
-                label: const Text('Réinitialiser les données de démo'),
+                icon: const Icon(Icons.delete_sweep_outlined),
+                label: const Text('Vider mes données locales'),
               ),
             ),
           ],
@@ -1838,7 +1893,11 @@ class _ResetDataCard extends StatelessWidget {
 }
 
 class _InfoCard extends StatelessWidget {
-  const _InfoCard({required this.icon, required this.title, required this.subtitle});
+  const _InfoCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
 
   final IconData icon;
   final String title;
@@ -1879,7 +1938,9 @@ class _CardContainer extends StatelessWidget {
       decoration: BoxDecoration(
         color: colorScheme.surface,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.45)),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.45),
+        ),
         boxShadow: [
           BoxShadow(
             color: colorScheme.shadow.withValues(alpha: 0.04),

@@ -14,7 +14,7 @@ class ShoppingListScreen extends StatelessWidget {
 
   final ShoppingListStore shoppingStore;
   final FridgeStore fridgeStore;
-  static const _deletionSnackBarDuration = Duration(seconds: 4);
+  static const _deletionSnackBarDuration = Duration(seconds: 2);
 
   @override
   Widget build(BuildContext context) {

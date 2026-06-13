@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../data/fridge_store.dart';
+import '../data/profile_store.dart';
 import '../models/food.dart';
 import '../models/stock_setup_defaults.dart';
 
@@ -9,10 +10,12 @@ class StockSetupScreen extends StatefulWidget {
   const StockSetupScreen({
     super.key,
     required this.store,
+    required this.profileStore,
     required this.onOpenScan,
   });
 
   final FridgeStore store;
+  final ProfileStore profileStore;
   final VoidCallback onOpenScan;
 
   @override
@@ -78,6 +81,7 @@ class _StockSetupScreenState extends State<StockSetupScreen> {
 
           return _StockSetupOverview(
             foods: widget.store.foods,
+            profileStore: widget.profileStore,
             onLocationSelected: (value) {
               setState(() => _selectedLocation = value);
             },
@@ -93,12 +97,14 @@ class _StockSetupScreenState extends State<StockSetupScreen> {
 class _StockSetupOverview extends StatelessWidget {
   const _StockSetupOverview({
     required this.foods,
+    required this.profileStore,
     required this.onLocationSelected,
     required this.onOpenScan,
     required this.onPhotoTap,
   });
 
   final List<FoodItem> foods;
+  final ProfileStore profileStore;
   final ValueChanged<StorageLocation> onLocationSelected;
   final VoidCallback onOpenScan;
   final VoidCallback onPhotoTap;
@@ -121,6 +127,8 @@ class _StockSetupOverview extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
       children: [
+        _ProfileNameSetupCard(store: profileStore),
+        const SizedBox(height: 24),
         Text(
           'Ajoute ce que tu as déjà chez toi',
           style: theme.textTheme.headlineSmall?.copyWith(
@@ -189,6 +197,118 @@ class _StockSetupOverview extends StatelessWidget {
           isComingSoon: true,
         ),
       ],
+    );
+  }
+}
+
+class _ProfileNameSetupCard extends StatefulWidget {
+  const _ProfileNameSetupCard({required this.store});
+
+  final ProfileStore store;
+
+  @override
+  State<_ProfileNameSetupCard> createState() => _ProfileNameSetupCardState();
+}
+
+class _ProfileNameSetupCardState extends State<_ProfileNameSetupCard> {
+  late final TextEditingController _controller;
+  String? _errorText;
+  bool _saved = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.store.profile.name);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final value = _controller.text.trim();
+    if (value.isEmpty) {
+      setState(() {
+        _errorText = 'Tu peux remplir ce champ maintenant ou plus tard.';
+        _saved = false;
+      });
+      return;
+    }
+
+    final saved = await widget.store.updateName(value);
+    if (!mounted || !saved) return;
+    setState(() {
+      _errorText = null;
+      _saved = true;
+    });
+    FocusScope.of(context).unfocus();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.55),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Comment veux-tu qu’on t’appelle ?',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Facultatif : tu pourras aussi le modifier plus tard dans Profil.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _controller,
+            textInputAction: TextInputAction.done,
+            onChanged: (_) {
+              if (_errorText != null || _saved) {
+                setState(() {
+                  _errorText = null;
+                  _saved = false;
+                });
+              }
+            },
+            onSubmitted: (_) => _save(),
+            decoration: InputDecoration(
+              labelText: 'Prénom ou nom',
+              hintText: 'Ex. Camille',
+              errorText: _errorText,
+              prefixIcon: const Icon(Icons.person_outline_rounded),
+              suffixIcon: _saved
+                  ? Icon(Icons.check_circle_rounded, color: colorScheme.primary)
+                  : null,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: _save,
+              child: const Text('Enregistrer'),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -27,7 +27,7 @@ class FridgeScreen extends StatefulWidget {
 }
 
 class _FridgeScreenState extends State<FridgeScreen> {
-  static const _deletionSnackBarDuration = Duration(seconds: 4);
+  static const _deletionSnackBarDuration = Duration(seconds: 2);
 
   final _searchController = TextEditingController();
   final Set<String> _selectedFoodIds = {};
@@ -874,7 +874,7 @@ class _FoodCard extends StatelessWidget {
                       Icon(
                         FoodCategoryHelper.icon(food.category),
                         size: 28,
-                        color: urgencyColor,
+                        color: colorScheme.primary,
                       ),
                       Positioned(
                         right: 4,
@@ -1139,7 +1139,7 @@ class _FoodDetailSheet extends StatelessWidget {
                     child: Icon(
                       FoodCategoryHelper.icon(food.category),
                       size: 32,
-                      color: urgencyColor,
+                      color: colorScheme.primary,
                     ),
                   ),
                   const SizedBox(width: 16),

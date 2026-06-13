@@ -165,6 +165,7 @@ class _MainNavigationState extends State<_MainNavigation> {
   bool _isUploadingFavoriteRecipesToCloud = false;
   bool _isUploadingRecipeNotesToCloud = false;
   bool _isRestoringCloudData = false;
+  bool _isClearingLocalData = false;
 
   @override
   void initState() {
@@ -207,11 +208,20 @@ class _MainNavigationState extends State<_MainNavigation> {
 
   bool get _isCloudSyncSuspended =>
       _isRestoringCloudData ||
+      _isClearingLocalData ||
       widget.stores.authService.isCloudOnboardingPending;
 
   void _handleAuthStateChanged() {
     if (_isCloudSyncSuspended) {
       _cancelCloudSyncDebounces();
+    }
+
+    if (widget.stores.authService.isSignedIn) {
+      unawaited(
+        widget.stores.profileStore.updateNameFromAuthIfNeeded(
+          widget.stores.authService.displayName ?? 'Utilisateur',
+        ),
+      );
     }
   }
 
@@ -440,17 +450,27 @@ class _MainNavigationState extends State<_MainNavigation> {
       MaterialPageRoute<void>(
         builder: (context) => StockSetupScreen(
           store: widget.stores.fridgeStore,
+          profileStore: widget.stores.profileStore,
           onOpenScan: () => _goToTab(_scanTabIndex),
         ),
       ),
     );
   }
 
-  Future<void> _resetDemoData() async {
-    widget.stores.fridgeStore.resetDemoData();
-    widget.stores.shoppingListStore.clearAll();
-    widget.stores.scanHistoryStore.clearAll();
-    setState(() => _selectedIndex = 0);
+  Future<void> _clearLocalData() async {
+    _isClearingLocalData = true;
+    _cancelCloudSyncDebounces();
+
+    try {
+      await widget.stores.fridgeStore.replaceAllFoods(const []);
+      await widget.stores.shoppingListStore.replaceAllItems(const []);
+      await widget.stores.scanHistoryStore.replaceAllItems(const []);
+      await widget.stores.favoriteRecipesStore.clearAll();
+      await widget.stores.recipeNotesStore.replaceAllNotes(const {});
+      setState(() => _selectedIndex = 0);
+    } finally {
+      _isClearingLocalData = false;
+    }
   }
 
   @override
@@ -475,6 +495,7 @@ class _MainNavigationState extends State<_MainNavigation> {
       FridgeScreen(store: fridgeStore, shoppingStore: shoppingListStore),
       ScanScreen(
         store: fridgeStore,
+        profileStore: profileStore,
         historyStore: scanHistoryStore,
         onNavigateToFridge: _goToFridge,
       ),
@@ -499,7 +520,7 @@ class _MainNavigationState extends State<_MainNavigation> {
         recipeNotesStore: recipeNotesStore,
         authService: authService,
         onCloudRestoreStateChanged: _setCloudRestoreInProgress,
-        onResetDemoData: _resetDemoData,
+        onClearLocalData: _clearLocalData,
       ),
     ];
 
